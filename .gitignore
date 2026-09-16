@@ -1,1 +1,4 @@
 champout/
+teambuilder.duckdb
+__pycache__/
+*.pyc
