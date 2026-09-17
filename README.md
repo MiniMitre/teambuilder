@@ -38,7 +38,7 @@ filters compose with `&` only for now - `|` is not built.
 
 Requires - [UV (Python Project Manager)](https://docs.astral.sh/uv/) to be installed.
 
-Set up the data and the calculator first - see the two sections [Getting the champout data](Getting the champout data)and [Getting the damage calculator](Getting the damage calculator) below, which are the parts that need cloning - then:
+Set up the data and the calculator first - see the two sections [Getting the champout data](#getting-the-champout-data)and [Getting the damage calculator](#getting-the-champout-data) below, which are the parts that need cloning - then:
 
 ```bash
 uv run teambuilder build-db                 # parse the dumps into DuckDB
