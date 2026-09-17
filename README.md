@@ -103,6 +103,61 @@ you checked the numbers against the calculator, and that you can explain what
 the change does and why. A pull request that its author has not read is not a
 contribution, it is a review request with extra steps.
 
+## Next steps and contribution suggestions
+
+Roughly in order of how achievable they are.
+
+**Damage filters in the search.** The obvious missing piece: `can_ko(move,
+defender)` and `survives(attacker, move)` as filters, so a search can ask for
+grass types that guarantee an OHKO on something. This one cannot be a SQL
+fragment like the others - it has to run the candidates from the SQL result
+through the calculator - but the batching makes that cheap: the whole roster
+is 396 requests in one node process, a fraction of a second.
+
+**Type matchup filters.** Give it a pokemon, or a team, and ask for coverage:
+"shares no weakness with these five", or "can hit this super effectively",
+either by its own types or by the moves it actually learns. The type chart is
+already in the calculator's data (`calc/src/data/types.ts`), so it does not
+need rebuilding, and `move_category` tells you which of a pokemon's moves can
+use a given type offensively.
+
+The part that needs care is abilities. Levitate, Flash Fire, Water Absorb,
+Volt Absorb, Motor Drive, Sap Sipper, Lightning Rod, Storm Drain and Dry Skin
+cancel a type outright; Thick Fat and Heatproof only halve it. A weakness
+filter that ignores those will confidently recommend pokemon that are not
+weak to the thing at all.
+
+**A repository of common sets.** The Smogon calculator has its set dropdown,
+and the same data exists for Champions: `src/js/data/sets/champions.js` in the
+damage-calc checkout, a `SETDEX_CHAMPIONS` object of about 85KB, keyed by
+species and then by set name, with level, ability, item, nature, moves and
+stat points. Importing it into DuckDB would mean searching and calculating
+against sets people actually run, rather than bare stat lines. One wrinkle:
+its spreads use short keys (`hp`, `at`, `df`, `sa`, `sd`, `sp`) under `sps`,
+so they need mapping to the calculator's `evs` names.
+
+**A frontend.** It would be nice. The author is not going to build one - this
+is a command line tool by preference, not by accident - so it is wide open to
+anyone who wants it.
+
+Smaller, self-contained jobs:
+
+- Import move metadata (type, category, base power) into DuckDB, so a filter
+  can ask for "learns a physical grass move of at least 90 base power" instead
+  of naming moves one at a time.
+- Special-case Body Press and Psyshock in `attacking_stat` so the point search
+  works for them - see the caveats above.
+- Reconcile names between the champout dumps and the calculator's data. They
+  mostly agree, but not entirely: the dumps carry moves the calculator does
+  not have, and apostrophes and form suffixes are an obvious place for a
+  silent mismatch.
+- A speed benchmark helper, in the shape of the existing two: the fewest stat
+  points needed to outspeed a given pokemon.
+
+If you have an idea that is not here, open an issue - the list above is what
+one person could see from inside the problem, which is not the same as what
+the tool needs.
+
 ## License
 
 [MIT](LICENSE), Copyright (c) 2026 Mateo Puente.
