@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@smogon/calc": "file:damage-calc/calc"
+  }
+}

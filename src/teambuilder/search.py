@@ -8,9 +8,11 @@ values still line up with the `?`s left to right in the final query.
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 import duckdb
 
+from teambuilder.calc import CalcError, build_request, calculate, move_category
 from teambuilder.data import DB_PATH
 
 
@@ -44,7 +46,6 @@ class Filter:
         )
 
     def __str__(self): return self.natural
-
 
 def has_type(type_: str) -> Filter:
     return Filter("? IN (p.type1, coalesce(p.type2, p.type1))", f"Is of type: {type_}",  (type_,))
@@ -99,6 +100,171 @@ def search(
     with duckdb.connect(db, read_only=True) as con:
         return con.execute(sql, list(params)).fetchall()
 
+# Champions gives each stat 0-32 points, so every search below is a scan over
+# 33 candidates in one batch - ~20ms, and damage is monotonic in the invested
+# stat, so the first spread that clears the bar is the cheapest one.
+MAX_STAT_POINTS = 32
+
+
+class Investment(NamedTuple):
+    """The cheapest spread that met a threshold, and the calc that proves it."""
+
+    points: int
+    desc: str
+    percent: tuple[float, float]
+
+    def __str__(self):
+        return f"{self.points} points: {self.desc}"
+
+
+def min_evs_to_ko(
+    attacker: str,
+    move: str,
+    defender: str,
+    *,
+    percent: float = 100.0,
+    attacker_opts: dict | None = None,
+    defender_evs: dict | None = None,
+    defender_opts: dict | None = None,
+    move_opts: dict | None = None,
+    field_opts: dict | None = None,
+) -> Investment | None:
+    """Fewest attacking stat points that guarantee `percent`% damage, or None.
+
+    Guaranteed means the *lowest* roll clears the bar, which is the usual
+    reading of "this OHKOes": a range that only sometimes reaches 100% does
+    not count. `percent` above 100 asks for overkill (useful against Focus
+    Sash or Sturdy), below 100 for a chip threshold such as a guaranteed 2HKO
+    at 50.
+    """
+    stat = attacking_stat(move)
+    return _cheapest(
+        [
+            build_request(
+                attacker, move, defender,
+                attacker_evs={stat: points},
+                attacker_opts=attacker_opts,
+                defender_evs=defender_evs,
+                defender_opts=defender_opts,
+                move_opts=move_opts,
+                field_opts=field_opts,
+            )
+            for points in range(MAX_STAT_POINTS + 1)
+        ],
+        # range[0] is the lowest roll: the damage that is always dealt.
+        lambda response: 100 * response["range"][0] / response["defenderMaxHP"] >= percent,
+    )
+
+def ability_to_ko(
+    attacker: str,
+    move: str,
+    defender: str,
+    *,
+    percent: float = 100.0,
+    attacker_evs: dict | None = None,
+    attacker_opts: dict | None = None,
+    defender_evs: dict | None = None,
+    defender_opts: dict | None = None,
+    move_opts: dict | None = None,
+    field_opts: dict | None = None,
+) -> Investment | None:
+    """Fewest attacking stat points that guarantee `percent`% damage, or None.
+
+    Guaranteed means the *lowest* roll clears the bar, which is the usual
+    reading of "this OHKOes": a range that only sometimes reaches 100% does
+    not count. `percent` above 100 asks for overkill (useful against Focus
+    Sash or Sturdy), below 100 for a chip threshold such as a guaranteed 2HKO
+    at 50.
+    """
+    return _cheapest(
+        [
+            build_request(
+                attacker, move, defender,
+                attacker_evs={stat: points},
+                attacker_opts=attacker_opts,
+                defender_evs=defender_evs,
+                defender_opts=defender_opts,
+                move_opts=move_opts,
+                field_opts=field_opts,
+            )
+            for points in range(MAX_STAT_POINTS + 1)
+        ],
+        # range[0] is the lowest roll: the damage that is always dealt.
+        lambda response: 100 * response["range"][0] / response["defenderMaxHP"] >= percent,
+    )
+
+
+def min_evs_to_survive(
+    attacker: str,
+    move: str,
+    defender: str,
+    *,
+    percent: float = 100.0,
+    invest: str = "hp",
+    attacker_evs: dict | None = None,
+    attacker_opts: dict | None = None,
+    defender_evs: dict | None = None,
+    defender_opts: dict | None = None,
+    move_opts: dict | None = None,
+    field_opts: dict | None = None,
+) -> Investment | None:
+    """Fewest points in `invest` that hold the damage under `percent`%, or None.
+
+    The mirror of min_evs_to_ko: there the lowest roll has to reach the bar,
+    here the *highest* roll has to stay under it, since surviving has to hold
+    for every roll. The comparison is strict because damage equal to the
+    defender's HP is a KO, so "survives" is "takes less than 100%".
+
+    `invest` is the stat the points go into - "hp" is usually the most
+    efficient, but "def" or "spd" can win once a defence is already high.
+    """
+    if invest not in ("hp", "def", "spd"):
+        raise ValueError(f"invest must be hp, def or spd, got {invest!r}")
+    return _cheapest(
+        [
+            build_request(
+                attacker, move, defender,
+                attacker_evs=attacker_evs,
+                attacker_opts=attacker_opts,
+                # Points go into `invest`; any other stats the caller set stay.
+                defender_evs={**(defender_evs or {}), invest: points},
+                defender_opts=defender_opts,
+                move_opts=move_opts,
+                field_opts=field_opts,
+            )
+            for points in range(MAX_STAT_POINTS + 1)
+        ],
+        # range[1] is the highest roll: the damage in the worst case.
+        lambda response: 100 * response["range"][1] / response["defenderMaxHP"] < percent,
+    )
+
+
+def attacking_stat(move: str) -> str:
+    """Which stat a move attacks off, by category.
+
+    Not reliable for the handful of moves that break the rule - Body Press is
+    Physical but uses Def, Psyshock is Special but hits Def - so investing by
+    category will do nothing for those. The calculator still gets their damage
+    right; it is only this choice of stat to invest in that is wrong.
+    """
+    category = move_category(move)
+    if category is None:
+        raise ValueError(f"{move!r} is not in the Champions move data")
+    if category == "Status":
+        raise ValueError(f"{move!r} is a Status move and deals no damage")
+    return "spa" if category == "Special" else "atk"
+
+
+def _cheapest(requests: list[dict], accept) -> Investment | None:
+    """First response that `accept` likes, which is the cheapest by monotonicity."""
+    for points, response in enumerate(calculate(requests)):
+        if "error" in response:
+            raise CalcError(response["error"])
+        if accept(response):
+            return Investment(points, response["desc"], tuple(response["percent"]))
+    return None
+
+
 def main():
     f = (
         has_type("Grass")
@@ -112,3 +278,11 @@ def main():
     print()
     for row in search(f, columns="name, type1, type2, atk, spe, bst"):
         print(row)
+
+    print()
+    print("Minimum points for Blaziken to always OHKO Incineroar:")
+    print(" ", min_evs_to_ko("Blaziken", "Close Combat", "Incineroar", defender_evs={"def": 12}))
+
+    print("Minimum points for Snorlax to take under 70% from max Atk Rillaboom:")
+    print(" ", min_evs_to_survive("Rillaboom", "Wood Hammer", "Snorlax",
+                                  attacker_evs={"atk": 32}, percent=70))
