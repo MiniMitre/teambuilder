@@ -1,7 +1,7 @@
 """Command line interface: search the pokedex and size up damage calculations.
 
 Every command is a thin wrapper over teambuilder.search and teambuilder.calc,
-so anything the CLI cannot express is still available from Python
+so anything the CLI cannot express is still available from Python.
 """
 
 import json
