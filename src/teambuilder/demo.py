@@ -4,7 +4,6 @@ from teambuilder.damage import (
     can_ko,
     can_ko_any_atk,
     min_evs_to_ko,
-    min_evs_to_survive,
     survive_filter,
 )
 from teambuilder.filters import (
@@ -16,6 +15,7 @@ from teambuilder.filters import (
     stat_between,
 )
 from teambuilder.pokedex import search
+
 
 def main():
     f = (
@@ -37,26 +37,25 @@ def main():
 
     print()
 
-    min_evs_to_survive("Salamence-Mega","Hyper Voice","Ariados",percent=100,attacker_opts={"nature":"","item":""},attacker_evs={"spa":32})
-
-    slow = [row[0] for row in search(max_stat("spe", 45), columns="name")]
-    mence_survival = survive_filter("Salamence-Mega", "Hyper Voice", attacker_evs={"spa": 32 } )
-    for name, (investment, ) in mence_survival(slow).items(): 
-        print(f"  {name:<20} {investment.points} points to Survive") 
-
     print("Which pokemon can KO mega salamence with triple axel while being base 100 or higher")
     
-    speedy = [row[0] for row in search(min_stat("spe", 100), columns="name")]
+    speedy = [row[0] for row in search(min_stat("spe", 130), columns="name")]
     for name, investment in can_ko(speedy, "Triple Axel", "Salamence-Mega").items():
-         print(f"  {name:<20} {investment.points} points")
+        print(f"  {name:<20} {investment.points} points")
+        
+    print("Which pokemon are under 60 speed and survive a mega mence hyper voice")
+    slow = [row[0] for row in search(max_stat("spe", 60), columns="name")]
+    mence_survival = survive_filter("Salamence-Mega", "Hyper Voice", attacker_evs={"spa": 32 } )
+    for name, (investment, ) in mence_survival(slow).items():
+        spread = " / ".join(f"{points} {stat}" for stat, points in investment.spread.items())
+        print(f"  {name:<20} {investment.points:>2} points to survive  ({spread})")
 
 
     print()
     filter = (
          can_ko_any_atk("Salamence-Mega", defender_evs={"hp": 2})
     )
-
-    print("Which base 100 spe mons manage this")
+    print("Which base 130 spe mons manage this")
     print(f"{filter}\n")
     # One Investment per AND-ed filter, in composition order - so this unpacks
     # one while `filter` is a single check, and needs another name for every
