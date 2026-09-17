@@ -60,22 +60,22 @@ def relevant_defense_stat(attack_type:str) -> str:
         raise ValueError(f"{attack_type!r} is not in a valid attack type")
 
 
-def _evaluate(requests: list[dict]):
+def _evaluate(requests: list[dict], points: list[int] | None = None):
     """Runs every request through the calculator, yielding (response, Investment) pairs.
 
-    Shared core for _cheapest, _breakpoints, and friends: handles error
-    checking and Investment construction once, so callers only decide what
-    to do with each result.
+    `points` lets callers supply the real per-request cost (e.g. hp+def sum)
+    instead of the request's position in the list. Defaults to the index,
+    which is correct when requests were built by sweeping 0..MAX_STAT_POINTS.
     """
-    for points, response in enumerate(calculate(requests)):
+    point_values = points if points is not None else range(len(requests))
+    for pts, response in zip(point_values, calculate(requests)):
         if "error" in response:
             raise CalcError(response["error"])
         investment = Investment(
-            points, response["desc"], tuple(response["percent"]),
+            pts, response["desc"], tuple(response["percent"]),
             tuple(response["range"]), response["defenderMaxHP"],
         )
         yield response, investment
-
 
 def _cheapest(requests: list[dict], accept) -> Investment | None:
     """First response that `accept` likes, which is the cheapest by monotonicity."""
@@ -96,11 +96,11 @@ def _breakpoints(requests: list[dict], key) -> list[Investment]:
             previous = current
     return breakpoints
 
-def _all(requests: list[dict]) -> list[Investment]:
+def _all(requests: list[dict], points: list[int] | None = None) -> list[Investment]:
     """Every Investment, one per request, in order."""
-    return [investment for _, investment in _evaluate(requests)]
+    return [investment for _, investment in _evaluate(requests, points)]
 
-def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INVEST_IN
+def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INVEST_IN,showAll=False
 ):
     #Initialise the min points used at 32/32
     minPoints:int = 64
@@ -114,7 +114,15 @@ def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INV
         calculated_HP = ((dealt-pct*current_hp)/pct)
         #Add a small amount to the caclculated HP, to make sure we always survive a hit (round up if needed)
         adjusted_HP = max(ceil(calculated_HP + 0.01),0)
+        if adjusted_HP > MAX_STAT_POINTS:
+            #We cannot survive at the given defense investment
+            continue
+
         total_points_used = adjusted_HP + points
+
+        if showAll:
+            minPairs.append(({HP: adjusted_HP, INVEST_IN: points}))
+            continue
 
         if minPoints > total_points_used:
             #Set the new best points
@@ -158,9 +166,8 @@ def verify_Min_EVs (
         field_opts=field_opts,
     )
     for pair in minPairs
-    ] 
-
-    return _all(requests)
+    ]
+    return _all(requests, points=[sum(pair.values()) for pair in minPairs])
 
 def _ability_scan(attacker: str, move: str, defender: str, *, vary: str, pick, options: dict):
     """Calculate this matchup once per ability of one side, and pick an extreme.
@@ -306,6 +313,7 @@ def min_evs_to_survive(
     defender: str,
     *,
     percent: float = 100.0,
+    showAll = False,
     attacker_opts: dict | None = None,
     attacker_evs: dict | None = None,
     defender_evs: dict | None = None,
@@ -330,11 +338,11 @@ def min_evs_to_survive(
         field_opts=field_opts
     )
 
-    optimal_EVs = calculate_HP_from_Breakpoints(breakpoints,percent,hp,invest)
+    optimal_EVs = calculate_HP_from_Breakpoints(breakpoints,percent,hp,invest, showAll=showAll)
 
     #Optimal_EV's is empty because we could not find a solution that survived
     if not bool(optimal_EVs):
-        print(f"Cannot take less than {percent} damage:")
+        print(f"Cannot guarantee less than {percent}% damage:")
         request = build_request(
                 attacker, move, defender,
                 attacker_evs=attacker_evs,
@@ -347,10 +355,15 @@ def min_evs_to_survive(
         print(_all([request])[0].desc)
 
     else:
-        min_total = sum(optimal_EVs[0].values())
-
-        for res in verify_Min_EVs(optimal_EVs,attacker,move,defender,attacker_evs=attacker_evs,attacker_opts=attacker_opts):
-            print(f"{min_total} Points: {res.desc}")
+        for res in verify_Min_EVs(
+            optimal_EVs,attacker,move,defender,
+            attacker_evs=attacker_evs,
+            attacker_opts=attacker_opts,
+            defender_evs=defender_evs,
+            defender_opts=defender_opts,
+            move_opts=move_opts,
+            field_opts=field_opts):
+            print(f"{res.points} Points: {res.desc}")
 
 def find_damage_breakpoints(
     attacker: str,

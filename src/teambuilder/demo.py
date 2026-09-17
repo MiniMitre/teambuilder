@@ -38,6 +38,7 @@ def main():
     print()
 
     min_evs_to_survive("Salamence-Mega","Hyper Voice","Ariados",percent=100,attacker_opts={"nature":"","item":""},attacker_evs={"spa":32})
+    min_evs_to_survive("Sneasler","Close Combat","Kingambit",percent=100,attacker_opts={"nature":"Adamant","item":""},attacker_evs={"atk":32},defender_opts={"item":"Chople Berry"},field_opts={"terrain":"Psychic"},showAll=True)
 
     slow = [row[0] for row in search(max_stat("spe", 45), columns="name")]
     mence_survival = survive_filter("Salamence-Mega", "Hyper Voice", attacker_evs={"spa": 32 } )
