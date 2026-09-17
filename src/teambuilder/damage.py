@@ -1,3 +1,4 @@
+from math import ceil
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,8 @@ class Investment(NamedTuple):
     points: int
     desc: str
     percent: tuple[float, float]
+    damage: tuple[int, int]
+    user_hp: int
     move: str | None = None        # set when the filter picked the move, not the caller
 
     def __str__(self):
@@ -32,7 +35,6 @@ class BestAbility(NamedTuple):
 
     def __str__(self):
         return f"{' / '.join(self.names)}: {self.damage[0]}-{self.damage[1]}"
-
 
 def attacking_stat(move: str) -> str:
     """Which stat a move attacks off, by category.
@@ -49,16 +51,116 @@ def attacking_stat(move: str) -> str:
         raise ValueError(f"{move!r} is a Status move and deals no damage")
     return "spa" if category == "Special" else "atk"
 
+def relevant_defense_stat(attack_type:str) -> str:
+    if attack_type == "spa":
+        return "spd"
+    elif attack_type == "atk":
+        return "def"
+    else:
+        raise ValueError(f"{attack_type!r} is not in a valid attack type")
 
-def _cheapest(requests: list[dict], accept) -> Investment | None:
-    """First response that `accept` likes, which is the cheapest by monotonicity."""
+
+def _evaluate(requests: list[dict]):
+    """Runs every request through the calculator, yielding (response, Investment) pairs.
+
+    Shared core for _cheapest, _breakpoints, and friends: handles error
+    checking and Investment construction once, so callers only decide what
+    to do with each result.
+    """
     for points, response in enumerate(calculate(requests)):
         if "error" in response:
             raise CalcError(response["error"])
+        investment = Investment(
+            points, response["desc"], tuple(response["percent"]),
+            tuple(response["range"]), response["defenderMaxHP"],
+        )
+        yield response, investment
+
+
+def _cheapest(requests: list[dict], accept) -> Investment | None:
+    """First response that `accept` likes, which is the cheapest by monotonicity."""
+    for response, investment in _evaluate(requests):
         if accept(response):
-            return Investment(points, response["desc"], tuple(response["percent"]))
+            return investment
     return None
 
+
+def _breakpoints(requests: list[dict], key) -> list[Investment]:
+    """One Investment per distinct value of `key(response)`, at the fewest points that reach it."""
+    breakpoints: list[Investment] = []
+    previous = object()  # sentinel: never equals a real key value, so points=0 is always recorded
+    for response, investment in _evaluate(requests):
+        current = key(response)
+        if current != previous:
+            breakpoints.append(investment)
+            previous = current
+    return breakpoints
+
+def _all(requests: list[dict]) -> list[Investment]:
+    """Every Investment, one per request, in order."""
+    return [investment for _, investment in _evaluate(requests)]
+
+def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INVEST_IN
+):
+    #Initialise the min points used at 32/32
+    minPoints:int = 64
+    minPairs:list[dict[str, int]] = []
+
+    for inv in breakpoints:
+        dealt = inv.damage[1]
+        current_hp = inv.user_hp
+        points = inv.points
+        pct = PERCENT/100
+        calculated_HP = ((dealt-pct*current_hp)/pct)
+        #Add a small amount to the caclculated HP, to make sure we always survive a hit (round up if needed)
+        adjusted_HP = max(ceil(calculated_HP + 0.01),0)
+        total_points_used = adjusted_HP + points
+
+        if minPoints > total_points_used:
+            #Set the new best points
+            minPoints = total_points_used
+            #Empty the list
+            minPairs.clear()
+            #Add the new best combination
+            minPairs.append({HP: adjusted_HP, INVEST_IN: points})
+
+        elif minPoints == total_points_used:
+            #Add an equally good combination
+            minPairs.append({HP: adjusted_HP, INVEST_IN: points})
+
+        if calculated_HP < 0:
+            #We do not need to check any more values
+            break
+    
+    return minPairs
+
+def verify_Min_EVs (
+    minPairs: list[dict[str, int]],
+    attacker: str,
+    move: str,
+    defender: str,
+    *,
+    attacker_evs: dict | None = None,
+    attacker_opts: dict | None = None,
+    defender_evs: dict | None = None,
+    defender_opts: dict | None = None,
+    move_opts: dict | None = None,
+    field_opts: dict | None = None):
+
+    requests = [
+    build_request(
+        attacker, move, defender,
+        attacker_evs=attacker_evs,
+        attacker_opts=attacker_opts,
+        defender_evs={**(defender_evs or {}), **pair},
+        defender_opts=defender_opts,
+        move_opts=move_opts,
+        field_opts=field_opts,
+    )
+    for pair in minPairs
+    ] 
+
+    return _all(requests)
 
 def _ability_scan(attacker: str, move: str, defender: str, *, vary: str, pick, options: dict):
     """Calculate this matchup once per ability of one side, and pick an extreme.
@@ -177,9 +279,7 @@ def min_evs_to_ko(
 
     Guaranteed means the *lowest* roll clears the bar, which is the usual
     reading of "this OHKOes": a range that only sometimes reaches 100% does
-    not count. `percent` above 100 asks for overkill (useful against Focus
-    Sash or Sturdy), below 100 for a chip threshold such as a guaranteed 2HKO
-    at 50.
+    not count. For a Garanteed 2HKO set percent to 50.
     """
     stat = attacking_stat(move)
     return _cheapest(
@@ -206,43 +306,83 @@ def min_evs_to_survive(
     defender: str,
     *,
     percent: float = 100.0,
-    invest: str = "hp",
+    attacker_opts: dict | None = None,
+    attacker_evs: dict | None = None,
+    defender_evs: dict | None = None,
+    defender_opts: dict | None = None,
+    move_opts: dict | None = None,
+    field_opts: dict | None = None,
+) -> Investment | None:
+
+    hp = "hp"
+    invest = relevant_defense_stat(attacking_stat(move))
+
+    print(f"Minimum {hp}/{invest} for {defender} to survive {move}:")
+    
+    breakpoints = find_damage_breakpoints(
+        attacker, move, defender,
+        invest=invest,
+        attacker_evs=attacker_evs,
+        attacker_opts=attacker_opts,
+        defender_evs=defender_evs,
+        defender_opts=defender_opts,
+        move_opts=move_opts,
+        field_opts=field_opts
+    )
+
+    optimal_EVs = calculate_HP_from_Breakpoints(breakpoints,percent,hp,invest)
+
+    #Optimal_EV's is empty because we could not find a solution that survived
+    if not bool(optimal_EVs):
+        print(f"Cannot take less than {percent} damage:")
+        request = build_request(
+                attacker, move, defender,
+                attacker_evs=attacker_evs,
+                attacker_opts=attacker_opts,
+                defender_evs={"hp":32,"def":32,"spd":32},
+                defender_opts=defender_opts,
+                move_opts=move_opts,
+                field_opts=field_opts,
+            )
+        print(_all([request])[0].desc)
+
+    else:
+        min_total = sum(optimal_EVs[0].values())
+
+        for res in verify_Min_EVs(optimal_EVs,attacker,move,defender,attacker_evs=attacker_evs,attacker_opts=attacker_opts):
+            print(f"{min_total} Points: {res.desc}")
+
+def find_damage_breakpoints(
+    attacker: str,
+    move: str,
+    defender: str,
+    *,
+    invest: str = "def",
     attacker_evs: dict | None = None,
     attacker_opts: dict | None = None,
     defender_evs: dict | None = None,
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
-) -> Investment | None:
-    """Fewest points in `invest` that hold the damage under `percent`%, or None.
-
-    The mirror of min_evs_to_ko: there the lowest roll has to reach the bar,
-    here the *highest* roll has to stay under it, since surviving has to hold
-    for every roll. The comparison is strict because damage equal to the
-    defender's HP is a KO, so "survives" is "takes less than 100%".
-
-    `invest` is the stat the points go into - "hp" is usually the most
-    efficient, but "def" or "spd" can win once a defence is already high.
-    """
+) -> list[Investment]:
+    """The fewest `invest` EVs needed to reach each distinct max-damage value."""
     if invest not in ("hp", "def", "spd"):
         raise ValueError(f"invest must be hp, def or spd, got {invest!r}")
-    return _cheapest(
-        [
-            build_request(
-                attacker, move, defender,
-                attacker_evs=attacker_evs,
-                attacker_opts=attacker_opts,
-                # Points go into `invest`; any other stats the caller set stay.
-                defender_evs={**(defender_evs or {}), invest: points},
-                defender_opts=defender_opts,
-                move_opts=move_opts,
-                field_opts=field_opts,
-            )
-            for points in range(MAX_STAT_POINTS + 1)
-        ],
-        # range[1] is the highest roll: the damage in the worst case.
-        lambda response: 100 * response["range"][1] / response["defenderMaxHP"] < percent,
-    )
+
+    requests = [
+        build_request(
+            attacker, move, defender,
+            attacker_evs=attacker_evs,
+            attacker_opts=attacker_opts,
+            defender_evs={**(defender_evs or {}), invest: points},
+            defender_opts=defender_opts,
+            move_opts=move_opts,
+            field_opts=field_opts,
+        )
+        for points in range(MAX_STAT_POINTS + 1)
+    ]
+    return _breakpoints(requests, key=lambda response: response["range"][1])
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,7 +533,6 @@ def survive_filter(
     move: str,
     *,
     percent: float = 100.0,
-    invest: str = "hp",
     require_learns: bool = True,
     attacker_evs: dict | None = None,
     attacker_opts: dict | None = None,
@@ -424,13 +563,13 @@ def survive_filter(
                 attacker_evs=attacker_evs, attacker_opts=attacker_opts,
                 # Max points in the stat being invested, for the same reason
                 # ko_filter maxes the attacking stat before choosing.
-                defender_evs={invest: MAX_STAT_POINTS},
+                defender_evs={"hp": MAX_STAT_POINTS, "def":MAX_STAT_POINTS,"spd":MAX_STAT_POINTS},
                 defender_opts=defender_opts,
                 move_opts=move_opts, field_opts=field_opts,
             )
             investment = min_evs_to_survive(
                 attacker, move, name,
-                percent=percent, invest=invest,
+                percent=percent,
                 attacker_evs=attacker_evs, attacker_opts=attacker_opts,
                 defender_opts={**(defender_opts or {}), "ability": best.names[0]},
                 move_opts=move_opts, field_opts=field_opts,
@@ -440,8 +579,7 @@ def survive_filter(
         return kept
 
     threshold = "survives" if percent == 100.0 else f"takes under {percent}% from"
-    spread = "" if invest == "hp" else f" ({invest})"
-    return DamageFilter(f"{threshold} {move} from {attacker}{spread}", run)
+    return DamageFilter(f"{threshold} {move} from {attacker}", run)
 
 
 def can_ko(candidates: Iterable[str], move: str, defender: str, **options) -> dict[str, Investment]:
