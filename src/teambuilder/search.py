@@ -1,11 +1,4 @@
-"""Composable SQL filters over the pokemon table.
-
-A filter is a WHERE fragment plus the values its placeholders need. Keeping
-those two things together is what makes filters composable: when you glue two
-fragments with AND, you glue their parameter lists in the same order, so the
-values still line up with the `?`s left to right in the final query.
-"""
-
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
@@ -155,43 +148,88 @@ def min_evs_to_ko(
         lambda response: 100 * response["range"][0] / response["defenderMaxHP"] >= percent,
     )
 
-def ability_to_ko(
+class BestAbility(NamedTuple):
+    """The attacker's hardest-hitting ability, and the damage that proves it."""
+
+    names: tuple[str, ...]
+    damage: tuple[int, int]
+    desc: str
+
+    def __str__(self):
+        return f"{' / '.join(self.names)}: {self.damage[0]}-{self.damage[1]}"
+
+
+def get_abilities_for_poke(name: str, *, db: Path = DB_PATH) -> tuple[str, ...]:
+    """The distinct abilities a pokemon can have, in slot order.
+
+    Most entries repeat a slot ("Overgrow/Overgrow/Chlorophyll"), so the
+    duplicates are dropped - dict.fromkeys keeps the first occurrence of each.
+    """
+    with duckdb.connect(db, read_only=True) as con:
+        row = con.execute(
+            "SELECT ability1, ability2, ability_hidden FROM pokemon WHERE name = ?", [name]
+        ).fetchone()
+    if row is None:
+        raise ValueError(f"{name!r} is not in the pokedex")
+    return tuple(dict.fromkeys(a for a in row if a))
+
+
+def most_damaging_ability(
     attacker: str,
     move: str,
     defender: str,
     *,
-    percent: float = 100.0,
     attacker_evs: dict | None = None,
     attacker_opts: dict | None = None,
     defender_evs: dict | None = None,
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
-) -> Investment | None:
-    """Fewest attacking stat points that guarantee `percent`% damage, or None.
+) -> BestAbility:
+    """Which of the attacker's abilities hits hardest here, ties included.
 
-    Guaranteed means the *lowest* roll clears the bar, which is the usual
-    reading of "this OHKOes": a range that only sometimes reaches 100% does
-    not count. `percent` above 100 asks for overkill (useful against Focus
-    Sash or Sturdy), below 100 for a chip threshold such as a guaranteed 2HKO
-    at 50.
+    The usual reason to want this is to ask the strongest version of a
+    question: if the hardest-hitting ability cannot manage a KO, no set of
+    that pokemon can, so the answer holds without knowing which ability the
+    opponent actually runs.
+
+    Conditional abilities are calculated with their condition unmet, and the
+    two kinds are switched on differently: the pinch abilities (Overgrow,
+    Blaze, Torrent, Swarm) key off current HP, so they need
+    `attacker_opts={"originalCurHP": n}` with n at or under a third of max,
+    while Flash Fire, Stakeout and the like key off
+    `attacker_opts={"abilityOn": True}`.
     """
-    return _cheapest(
-        [
-            build_request(
-                attacker, move, defender,
-                attacker_evs={stat: points},
-                attacker_opts=attacker_opts,
-                defender_evs=defender_evs,
-                defender_opts=defender_opts,
-                move_opts=move_opts,
-                field_opts=field_opts,
-            )
-            for points in range(MAX_STAT_POINTS + 1)
-        ],
-        # range[0] is the lowest roll: the damage that is always dealt.
-        lambda response: 100 * response["range"][0] / response["defenderMaxHP"] >= percent,
+    abilities = get_abilities_for_poke(attacker)
+    requests = [
+        build_request(
+            attacker, move, defender,
+            attacker_evs=attacker_evs,
+            # A new dict per request: mutating one shared dict would also
+            # hand the caller's options back with an ability glued on.
+            attacker_opts={**(attacker_opts or {}), "ability": name},
+            defender_evs=defender_evs,
+            defender_opts=defender_opts,
+            move_opts=move_opts,
+            field_opts=field_opts,
+        )
+        for name in abilities
+    ]
+
+    responses = calculate(requests)
+    for response in responses:
+        if "error" in response:
+            raise CalcError(response["error"])
+
+    # Rolls scale together, so the highest range is the hardest hit either
+    # way; ties are every ability that matches it, which is the common case
+    # when none of them touch this move at all.
+    best = max(tuple(response["range"]) for response in responses)
+    tied = tuple(
+        name for name, response in zip(abilities, responses) if tuple(response["range"]) == best
     )
+    desc = next(r["desc"] for r in responses if tuple(r["range"]) == best)
+    return BestAbility(tied, best, desc)
 
 
 def min_evs_to_survive(
@@ -237,6 +275,95 @@ def min_evs_to_survive(
         # range[1] is the highest roll: the damage in the worst case.
         lambda response: 100 * response["range"][1] / response["defenderMaxHP"] < percent,
     )
+
+
+def can_ko(
+    candidates: Iterable[str],
+    move: str,
+    defender: str,
+    *,
+    percent: float = 100.0,
+    require_learns: bool = True,
+    attacker_opts: dict | None = None,
+    defender_evs: dict | None = None,
+    defender_opts: dict | None = None,
+    move_opts: dict | None = None,
+    field_opts: dict | None = None,
+    db: Path = DB_PATH,
+) -> dict[str, Investment]:
+    """Which candidates can guarantee `percent`% damage, and at what cost.
+
+    Returns {name: cheapest spread}, dropping the ones that cannot manage it
+    at any investment. Each candidate is asked at its hardest-hitting ability,
+    so a pokemon that is dropped here cannot do it with any ability - which is
+    the point: no assumption about the opponent's set is needed to rule one
+    out. A candidate that stays may need an ability it does not always run, so
+    `.desc` on the result is worth reading before trusting it.
+
+    This is a filter to run *after* the SQL ones, not another Filter: it costs
+    two node processes per candidate, so narrow the field down first and hand
+    the survivors over.
+
+    The defender is calculated exactly as `defender_opts` describes it, which
+    means its ability defaults to the first slot rather than its most annoying
+    one. Thick Fat and friends have to be asked for.
+    """
+    names = list(candidates)
+    # A list of dex numbers reaches DuckDB as ints and fails deep inside the
+    # IN clause with a cast error, so say what went wrong here instead:
+    # search() returns whole rows, and its default columns start with number.
+    wrong = next((n for n in names if not isinstance(n, str)), None)
+    if wrong is not None:
+        raise TypeError(
+            f"candidates must be species names, got {wrong!r} - "
+            'select them with search(..., columns="name")'
+        )
+    if require_learns:
+        names = _that_learn(move, names, db=db)
+
+    found = {}
+    for name in names:
+        best = most_damaging_ability(
+            name, move, defender,
+            # The strongest version of the question: max points in the stat
+            # the move uses, so nothing is ruled out for lack of investment.
+            attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
+            attacker_opts=attacker_opts,
+            defender_evs=defender_evs,
+            defender_opts=defender_opts,
+            move_opts=move_opts,
+            field_opts=field_opts,
+        )
+        investment = min_evs_to_ko(
+            name, move, defender,
+            percent=percent,
+            attacker_opts={**(attacker_opts or {}), "ability": best.names[0]},
+            defender_evs=defender_evs,
+            defender_opts=defender_opts,
+            move_opts=move_opts,
+            field_opts=field_opts,
+        )
+        if investment is not None:
+            found[name] = investment
+    return found
+
+
+def _that_learn(move: str, names: list[str], *, db: Path = DB_PATH) -> list[str]:
+    """The subset that actually has the move, in the order given.
+
+    Without this a search happily reports that Snorlax KOes things with Leaf
+    Storm, since the calculator will calculate any move for any pokemon.
+    """
+    if not names:
+        return []
+    placeholders = ", ".join(["?"] * len(names))
+    with duckdb.connect(db, read_only=True) as con:
+        rows = con.execute(
+            f"SELECT pokemon FROM pokemon_moves WHERE move = ? AND pokemon IN ({placeholders})",
+            [move, *names],
+        ).fetchall()
+    learners = {row[0] for row in rows}
+    return [name for name in names if name in learners]
 
 
 def attacking_stat(move: str) -> str:
@@ -286,3 +413,12 @@ def main():
     print("Minimum points for Snorlax to take under 70% from max Atk Rillaboom:")
     print(" ", min_evs_to_survive("Rillaboom", "Wood Hammer", "Snorlax",
                                   attacker_evs={"atk": 32}, percent=70))
+
+    print()
+    print("Which pokemon can KO mega salamence with triple axel while being base 115 or higher")
+    
+    speedy = [row[0] for row in search(min_stat("spe", 115), columns="name")]
+    for name, investment in can_ko(speedy, "Triple Axel", "Salamence-Mega").items():
+        print(f"  {name:<20} {investment.points} points")
+
+
