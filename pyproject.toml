@@ -1,8 +1,10 @@
 [project]
 name = "teambuilder"
 version = "0.1.0"
-description = "Add your description here"
+description = "Pokemon Champions team building: pokedex search and damage calculation"
 readme = "README.md"
+license = "MIT"
+authors = [{ name = "Mateo Puente", email = "matwap@proton.me" }]
 requires-python = ">=3.12"
 dependencies = [
     "duckdb>=1.5.5",
