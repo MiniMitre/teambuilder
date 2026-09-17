@@ -1,11 +1,18 @@
 """A worked example of the whole pipeline, wired to `uv run demo`."""
 
+import math
+from teambuilder.calc import build_request, calculate
+
 from teambuilder.damage import (
+    _all,
+    find_damage_breakpoints,
+    calculate_HP_from_Breakpoints,
     can_ko,
     ko_filter,
     min_evs_to_ko,
     min_evs_to_survive,
     survive_filter,
+    verify_Min_EVs,
 )
 from teambuilder.filters import (
     ability,
@@ -36,11 +43,19 @@ def main():
     print("Minimum points for Blaziken to always OHKO Incineroar:")
     print(" ", min_evs_to_ko("Blaziken", "Close Combat", "Incineroar", defender_evs={"def": 12}))
 
-    print("Minimum points for Snorlax to take under 70% from max Atk Rillaboom:")
-    print(" ", min_evs_to_survive("Rillaboom", "Wood Hammer", "Snorlax",
-                                  attacker_evs={"atk": 32}, percent=70))
-
     print()
+
+    ATTACKER = "Rillaboom"
+    MOVE = "Wood Hammer"
+    DEFENDER = "Snorlax"
+    INVEST_IN = "def"
+    ATK = 32
+    PERCENT = 70
+    NATURE = "Adamant"
+    ITEM = "Miracle Seed"
+
+    min_evs_to_survive(ATTACKER,MOVE,DEFENDER,INVEST_IN,percent=PERCENT,attacker_opts={"nature":NATURE,"item":ITEM},attacker_evs={"atk":ATK})
+
     print("Which pokemon can KO mega salamence with triple axel while being base 100 or higher")
     
     speedy = [row[0] for row in search(min_stat("spe", 100), columns="name")]
