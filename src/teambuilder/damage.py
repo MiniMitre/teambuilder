@@ -4,28 +4,28 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
+from tqdm import tqdm
+
 from teambuilder.calc import CalcError, build_request, calculate, move_category
 from teambuilder.data import DB_PATH
-from teambuilder.pokedex import get_abilities_for_poke, that_learn
+from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn
 
 # Champions gives each stat 0-32 points, so every search below is a scan over
 # 33 candidates in one batch - ~20ms, and damage is monotonic in the invested
 # stat, so the first spread that clears the bar is the cheapest one.
 MAX_STAT_POINTS = 32
 
-
 class Investment(NamedTuple):
-    """The cheapest spread that met a threshold, and the calc that proves it."""
-
     points: int
     desc: str
     percent: tuple[float, float]
     damage: tuple[int, int]
     user_hp: int
+    move: str | None = None        # set when the filter picked the move, not the caller
 
     def __str__(self):
-            return f"{self.points} points: {self.desc}"
-
+        with_move = f" with {self.move}" if self.move else ""
+        return f"{self.points} points{with_move}: {self.desc}"
 class BestAbility(NamedTuple):
     """The attacker's hardest-hitting ability, and the damage that proves it."""
 
@@ -448,7 +448,63 @@ def ko_filter(
     threshold = "KOes" if percent == 100.0 else f"deals {percent}% to"
     return DamageFilter(f"{threshold} {defender} with {move}", run)
 
+def can_ko_any_atk(
+    defender: str,
+    *,
+    percent: float = 100.0,
+    attacker_opts: dict | None = None,
+    defender_evs: dict | None = None,
+    defender_opts: dict | None = None,
+    move_opts: dict | None = None,
+    field_opts: dict | None = None,
+    db: Path = DB_PATH,
+) -> DamageFilter:
+    """Keeps candidates with any attack that guarantees `percent`% on `defender`.
 
+    The cheapest such move wins, and the result records which one it was.
+    Slow by construction: every damaging move in the learnset costs two node
+    processes, so this is the filter you run last, on a short list.
+    """
+    def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
+        kept = {}
+        for name in tqdm(_species_names(candidates), desc=f"Attacks that KO {defender}"):
+            cheapest = None
+            for move in _damaging_moves(name, db=db):
+                best = most_damaging_ability(
+                    name, move, defender,
+                    attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
+                    attacker_opts=attacker_opts,
+                    defender_evs=defender_evs, defender_opts=defender_opts,
+                    move_opts=move_opts, field_opts=field_opts,
+                )
+                investment = min_evs_to_ko(
+                    name, move, defender,
+                    percent=percent,
+                    attacker_opts={**(attacker_opts or {}), "ability": best.names[0]},
+                    defender_evs=defender_evs, defender_opts=defender_opts,
+                    move_opts=move_opts, field_opts=field_opts,
+                )
+                if investment is None:
+                    continue
+                investment = investment._replace(move=move)
+                if cheapest is None or investment.points < cheapest.points:
+                    cheapest = investment
+                if cheapest.points == 0:
+                    break          # free already, nothing can beat it
+            if cheapest is not None:
+                kept[name] = (cheapest,)
+        return kept
+
+    return DamageFilter(f"KOes {defender} with some attack", run)
+
+
+def _damaging_moves(name: str, *, db: Path = DB_PATH) -> list[str]:
+    """The learnset minus Status moves and minus what the calculator lacks.
+
+    move_category is None for moves champout carries that the Champions data
+    does not, and attacking_stat raises on those, so they go out together.
+    """
+    return [m for m in learnset(name, db=db) if move_category(m) in ("Physical", "Special")]
 def survive_filter(
     attacker: str,
     move: str,

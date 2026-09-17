@@ -1,18 +1,10 @@
 """A worked example of the whole pipeline, wired to `uv run demo`."""
 
-import math
-from teambuilder.calc import build_request, calculate
-
 from teambuilder.damage import (
-    _all,
-    find_damage_breakpoints,
-    calculate_HP_from_Breakpoints,
     can_ko,
-    ko_filter,
+    can_ko_any_atk,
     min_evs_to_ko,
     min_evs_to_survive,
-    survive_filter,
-    verify_Min_EVs,
 )
 from teambuilder.filters import (
     ability,
@@ -23,7 +15,6 @@ from teambuilder.filters import (
     stat_between,
 )
 from teambuilder.pokedex import search
-
 
 def main():
     f = (
@@ -64,17 +55,17 @@ def main():
 
 
     print()
-    trade = (ko_filter("Triple Axel", "Salamence-Mega") 
-    & survive_filter(
-            "Sneasler", "Dire Claw", attacker_evs={"atk": 32}, attacker_opts={"nature": "Adamant"}
-    )& survive_filter(
-            "Sneasler", "Close Combat", attacker_evs={"atk": 32}, attacker_opts={"nature": "Adamant"}
-    ))
+    filter = (
+         can_ko_any_atk("Salamence-Mega", defender_evs={"hp": 2})
+    )
 
-    print("Which base 100 spe mons do both of these")
-    print(f"{trade}\n")
-    for name, (ko, survive) in trade(speedy).items():
-        print(f"  {name:<20} {ko.points} points to KO, {survive.points} to survive")
+    print("Which base 100 spe mons manage this")
+    print(f"{filter}\n")
+    # One Investment per AND-ed filter, in composition order - so this unpacks
+    # one while `filter` is a single check, and needs another name for every
+    # check added to the chain.
+    for name, (ko,) in filter(speedy).items():
+        print(f"  {name:<20} {ko.points} points to KO with {ko.move}")
 
 
 if __name__ == "__main__":

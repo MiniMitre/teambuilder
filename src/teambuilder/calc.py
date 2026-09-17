@@ -55,6 +55,36 @@ def calculate(request: dict | list[dict]) -> dict | list[dict]:
     return responses[0]
 
 
+# Champout names 42 species the calculator does not have, and every one of them
+# resolves cleanly - each mapping below was checked by comparing base stats.
+#
+# The cosmetic families are one species to the calculator: Furfrou's nine trims,
+# Vivillon's eighteen patterns, Florges' flower colours, Alcremie's creams and
+# swirls, and Maushold's Family of Four all share their base form's stats.
+COSMETIC_FORMS = ("Furfrou", "Vivillon", "Florges", "Alcremie", "Maushold")
+
+# These two are not missing, only named differently. Gourgeist-Jumbo is
+# 85/100/122/58/75/54, which is the calculator's Gourgeist-Super, and champout's
+# bare Aegislash is 60/50/140/50/140/60, its Shield forme - the one it stands in
+# until it attacks. Ask for Aegislash-Blade explicitly if you want that side.
+RENAMED = {"Gourgeist-Jumbo": "Gourgeist-Super", "Aegislash": "Aegislash-Shield"}
+
+
+def species(name: str) -> str:
+    """The calculator's name for a champout species.
+
+    Applied to both sides of every request, so the rest of the code can keep
+    using champout's names throughout. A response describes whoever was
+    calculated, so a Furfrou-Star request comes back talking about Furfrou.
+    """
+    if name in RENAMED:
+        return RENAMED[name]
+    for base in COSMETIC_FORMS:
+        if name.startswith(base):
+            return base
+    return name
+
+
 def build_request(
     attacker: str,
     move: str,
@@ -77,11 +107,11 @@ def build_request(
     request = {
         "gen": gen,
         "attacker": {
-            "name": attacker,
+            "name": species(attacker),
             "opts": {"evs": attacker_evs or {}, **(attacker_opts or {})},
         },
         "defender": {
-            "name": defender,
+            "name": species(defender),
             "opts": {"evs": defender_evs or {}, **(defender_opts or {})},
         },
         "move": {"name": move, **(move_opts or {})},
