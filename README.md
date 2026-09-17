@@ -29,10 +29,10 @@ The idea is a one stop shop for the pieces that are missing when you sit down
 to build: the roster is searchable, the damage numbers come from the real
 calculator, and the two can be scripted together from Python.
 
-**The search and the calculator are not integrated yet.** You can find
-pokemon, and you can calculate for pokemon, but you cannot yet ask "which
-grass types can guarantee an OHKO on this defender". That is the obvious next
-step and it is not done.
+The two halves meet in the middle: a SQL filter narrows the roster down, and
+a damage filter then asks the calculator about the survivors, so "which ice
+types can KO this and live through its reply" is one expression. Damage
+filters compose with `&` only for now - `|` is not built.
 
 ## Usage
 
@@ -109,12 +109,12 @@ contribution, it is a review request with extra steps.
 
 Roughly in order of how achievable they are.
 
-**Damage filters in the search.** The obvious missing piece: `can_ko(move,
-defender)` and `survives(attacker, move)` as filters, so a search can ask for
-grass types that guarantee an OHKO on something. This one cannot be a SQL
-fragment like the others - it has to run the candidates from the SQL result
-through the calculator - but the batching makes that cheap: the whole roster
-is 396 requests in one node process, a fraction of a second.
+**`|` for damage filters, and a CLI command for them.** `ko_filter` and
+`survive_filter` compose with `&`, which runs the second check only on the
+names the first kept. `|` is harder than it looks: the two branches keep
+different investments for the same pokemon, so "either" has to decide what it
+returns. Neither filter is reachable from the command line yet, either - only
+from Python.
 
 **Type matchup filters.** Give it a pokemon, or a team, and ask for coverage:
 "shares no weakness with these five", or "can hit this super effectively",

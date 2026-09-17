@@ -1,6 +1,12 @@
 """A worked example of the whole pipeline, wired to `uv run demo`."""
 
-from teambuilder.damage import can_ko, min_evs_to_ko, min_evs_to_survive
+from teambuilder.damage import (
+    can_ko,
+    ko_filter,
+    min_evs_to_ko,
+    min_evs_to_survive,
+    survive_filter,
+)
 from teambuilder.filters import (
     ability,
     has_type,
@@ -35,11 +41,25 @@ def main():
                                   attacker_evs={"atk": 32}, percent=70))
 
     print()
-    print("Which pokemon can KO mega salamence with triple axel while being base 115 or higher")
+    print("Which pokemon can KO mega salamence with triple axel while being base 100 or higher")
     
-    speedy = [row[0] for row in search(min_stat("spe", 115), columns="name")]
+    speedy = [row[0] for row in search(min_stat("spe", 100), columns="name")]
     for name, investment in can_ko(speedy, "Triple Axel", "Salamence-Mega").items():
         print(f"  {name:<20} {investment.points} points")
+
+
+    print()
+    trade = (ko_filter("Triple Axel", "Salamence-Mega") 
+    & survive_filter(
+            "Sneasler", "Dire Claw", attacker_evs={"atk": 32}, attacker_opts={"nature": "Adamant"}
+    )& survive_filter(
+            "Sneasler", "Close Combat", attacker_evs={"atk": 32}, attacker_opts={"nature": "Adamant"}
+    ))
+
+    print("Which base 100 spe mons do both of these")
+    print(f"{trade}\n")
+    for name, (ko, survive) in trade(speedy).items():
+        print(f"  {name:<20} {ko.points} points to KO, {survive.points} to survive")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,5 @@
-"""Damage questions answered by running the calculator: how many stat points
-does an attack need, how few does surviving one take, and which candidates can
-manage a KO at all.
-
-Everything here shells out through teambuilder.calc, so it is orders of
-magnitude slower than a SQL filter. Narrow the field down with filters first,
-then ask these about the survivors.
-"""
-
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
@@ -69,6 +61,39 @@ def _cheapest(requests: list[dict], accept) -> Investment | None:
     return None
 
 
+def _ability_scan(attacker: str, move: str, defender: str, *, vary: str, pick, options: dict):
+    """Calculate this matchup once per ability of one side, and pick an extreme.
+
+    `vary` is "attacker" or "defender" and says whose abilities are swapped;
+    `pick` is max or min over the damage range. One node process covers every
+    ability, since they all go into a single batch.
+    """
+    subject = attacker if vary == "attacker" else defender
+    key = f"{vary}_opts"
+    abilities = get_abilities_for_poke(subject)
+
+    responses = calculate([
+        # A new dict per request: mutating one shared dict would also hand the
+        # caller's options back with an ability glued on.
+        build_request(attacker, move, defender,
+                      **{**options, key: {**(options.get(key) or {}), "ability": name}})
+        for name in abilities
+    ])
+    for response in responses:
+        if "error" in response:
+            raise CalcError(response["error"])
+
+    # Rolls scale together, so comparing ranges orders the abilities the same
+    # way any single roll would. Ties are every ability that matches the
+    # extreme, which is the common case: usually none of them touch this move.
+    damage = pick(tuple(response["range"]) for response in responses)
+    tied = tuple(
+        name for name, response in zip(abilities, responses) if tuple(response["range"]) == damage
+    )
+    desc = next(r["desc"] for r in responses if tuple(r["range"]) == damage)
+    return BestAbility(tied, damage, desc)
+
+
 def most_damaging_ability(
     attacker: str,
     move: str,
@@ -95,36 +120,46 @@ def most_damaging_ability(
     while Flash Fire, Stakeout and the like key off
     `attacker_opts={"abilityOn": True}`.
     """
-    abilities = get_abilities_for_poke(attacker)
-    requests = [
-        build_request(
-            attacker, move, defender,
-            attacker_evs=attacker_evs,
-            # A new dict per request: mutating one shared dict would also
-            # hand the caller's options back with an ability glued on.
-            attacker_opts={**(attacker_opts or {}), "ability": name},
-            defender_evs=defender_evs,
-            defender_opts=defender_opts,
-            move_opts=move_opts,
-            field_opts=field_opts,
-        )
-        for name in abilities
-    ]
-
-    responses = calculate(requests)
-    for response in responses:
-        if "error" in response:
-            raise CalcError(response["error"])
-
-    # Rolls scale together, so the highest range is the hardest hit either
-    # way; ties are every ability that matches it, which is the common case
-    # when none of them touch this move at all.
-    best = max(tuple(response["range"]) for response in responses)
-    tied = tuple(
-        name for name, response in zip(abilities, responses) if tuple(response["range"]) == best
+    return _ability_scan(
+        attacker, move, defender, vary="attacker", pick=max,
+        options=dict(
+            attacker_evs=attacker_evs, attacker_opts=attacker_opts,
+            defender_evs=defender_evs, defender_opts=defender_opts,
+            move_opts=move_opts, field_opts=field_opts,
+        ),
     )
-    desc = next(r["desc"] for r in responses if tuple(r["range"]) == best)
-    return BestAbility(tied, best, desc)
+
+
+def least_damaged_ability(
+    defender: str,
+    attacker: str,
+    move: str,
+    *,
+    attacker_evs: dict | None = None,
+    attacker_opts: dict | None = None,
+    defender_evs: dict | None = None,
+    defender_opts: dict | None = None,
+    move_opts: dict | None = None,
+    field_opts: dict | None = None,
+) -> BestAbility:
+    """Which of the defender's abilities takes the hit best, ties included.
+
+    The mirror of most_damaging_ability, and the same argument in reverse: if
+    the most resistant ability still cannot survive, no set of that pokemon
+    survives either. Defensive abilities are where this matters most - Thick
+    Fat halves the damage, Levitate and Flash Fire zero it - and the ones that
+    cancel a type entirely are exactly the ones a type chart would miss.
+
+    The defender leads the signature because it is the one being asked about.
+    """
+    return _ability_scan(
+        attacker, move, defender, vary="defender", pick=min,
+        options=dict(
+            attacker_evs=attacker_evs, attacker_opts=attacker_opts,
+            defender_evs=defender_evs, defender_opts=defender_opts,
+            move_opts=move_opts, field_opts=field_opts,
+        ),
+    )
 
 
 def min_evs_to_ko(
@@ -211,8 +246,38 @@ def min_evs_to_survive(
     )
 
 
-def can_ko(
-    candidates: Iterable[str],
+@dataclass(frozen=True, slots=True)
+class DamageFilter:
+    """A question for the calculator, deferred until it has candidates.
+
+    The SQL filters in teambuilder.filters compose into one query; these
+    cannot, because each one has to run the calculator per candidate. They
+    compose the same way regardless: `&` runs the second check only on the
+    names the first kept, so chaining narrows the work instead of doubling it.
+
+    `run` returns {name: one Investment per check, in composition order}.
+    """
+
+    natural: str
+    run: "Callable[[Iterable[str]], dict[str, tuple[Investment, ...]]]"
+
+    def __and__(self, other: "DamageFilter") -> "DamageFilter":
+        def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
+            kept = self.run(candidates)
+            # A dict iterates as its keys, so this hands the survivors on.
+            passed = other.run(kept)
+            return {name: kept[name] + passed[name] for name in passed}
+
+        return DamageFilter(f"{self.natural} AND\n{other.natural}", run)
+
+    def __call__(self, candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
+        return self.run(candidates)
+
+    def __str__(self):
+        return self.natural
+
+
+def ko_filter(
     move: str,
     defender: str,
     *,
@@ -224,59 +289,138 @@ def can_ko(
     move_opts: dict | None = None,
     field_opts: dict | None = None,
     db: Path = DB_PATH,
+) -> DamageFilter:
+    """Keeps candidates that can guarantee `percent`% damage on `defender`.
+
+    Each candidate is asked at its own hardest-hitting ability, so one that is
+    dropped cannot do it with any ability. One that is kept may need an
+    ability it does not always run - read `.desc` before trusting it.
+
+    The defender is calculated exactly as `defender_opts` describes it, so its
+    ability is whatever slot one happens to be. Thick Fat and friends have to
+    be asked for; `survive_filter` is the side that picks abilities for the
+    defender.
+    """
+    def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
+        names = _species_names(candidates)
+        if require_learns:
+            names = that_learn(move, names, db=db)
+
+        kept = {}
+        for name in names:
+            best = most_damaging_ability(
+                name, move, defender,
+                # The strongest version of the question: max points in the
+                # stat the move uses, so nothing is ruled out for lack of
+                # investment before the ability is even chosen.
+                attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
+                attacker_opts=attacker_opts,
+                defender_evs=defender_evs, defender_opts=defender_opts,
+                move_opts=move_opts, field_opts=field_opts,
+            )
+            investment = min_evs_to_ko(
+                name, move, defender,
+                percent=percent,
+                attacker_opts={**(attacker_opts or {}), "ability": best.names[0]},
+                defender_evs=defender_evs, defender_opts=defender_opts,
+                move_opts=move_opts, field_opts=field_opts,
+            )
+            if investment is not None:
+                kept[name] = (investment,)
+        return kept
+
+    threshold = "KOes" if percent == 100.0 else f"deals {percent}% to"
+    return DamageFilter(f"{threshold} {defender} with {move}", run)
+
+
+def survive_filter(
+    attacker: str,
+    move: str,
+    *,
+    percent: float = 100.0,
+    invest: str = "hp",
+    require_learns: bool = True,
+    attacker_evs: dict | None = None,
+    attacker_opts: dict | None = None,
+    defender_opts: dict | None = None,
+    move_opts: dict | None = None,
+    field_opts: dict | None = None,
+    db: Path = DB_PATH,
+) -> DamageFilter:
+    """Keeps candidates that can hold `attacker`'s `move` under `percent`%.
+
+    The mirror of ko_filter: there the candidate attacks and picks its best
+    ability, here the candidate defends and picks the ability that takes the
+    hit best. So a candidate dropped here cannot survive with any ability, and
+    one kept may be relying on an ability it does not always run.
+
+    The attacker is calculated as given, which is the same asymmetry ko_filter
+    has with its defender: if the attacker's own ability matters, pass it in
+    `attacker_opts`, or ask most_damaging_ability for it first.
+    """
+    if require_learns and not that_learn(move, [attacker], db=db):
+        raise ValueError(f"{attacker} does not learn {move}")
+
+    def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
+        kept = {}
+        for name in _species_names(candidates):
+            best = least_damaged_ability(
+                name, attacker, move,
+                attacker_evs=attacker_evs, attacker_opts=attacker_opts,
+                # Max points in the stat being invested, for the same reason
+                # ko_filter maxes the attacking stat before choosing.
+                defender_evs={invest: MAX_STAT_POINTS},
+                defender_opts=defender_opts,
+                move_opts=move_opts, field_opts=field_opts,
+            )
+            investment = min_evs_to_survive(
+                attacker, move, name,
+                percent=percent, invest=invest,
+                attacker_evs=attacker_evs, attacker_opts=attacker_opts,
+                defender_opts={**(defender_opts or {}), "ability": best.names[0]},
+                move_opts=move_opts, field_opts=field_opts,
+            )
+            if investment is not None:
+                kept[name] = (investment,)
+        return kept
+
+    threshold = "survives" if percent == 100.0 else f"takes under {percent}% from"
+    spread = "" if invest == "hp" else f" ({invest})"
+    return DamageFilter(f"{threshold} {move} from {attacker}{spread}", run)
+
+
+def can_ko(candidates: Iterable[str], move: str, defender: str, **options) -> dict[str, Investment]:
+    """ko_filter run on one set of candidates: {name: cheapest spread}.
+
+    `options` are ko_filter's, which is where they are documented; this only
+    unwraps the single-check result so the common case stays a plain mapping.
+    """
+    return _one_check(ko_filter(move, defender, **options), candidates)
+
+
+def can_survive(
+    candidates: Iterable[str], attacker: str, move: str, **options
 ) -> dict[str, Investment]:
-    """Which candidates can guarantee `percent`% damage, and at what cost.
+    """survive_filter run on one set of candidates: {name: cheapest spread}."""
+    return _one_check(survive_filter(attacker, move, **options), candidates)
 
-    Returns {name: cheapest spread}, dropping the ones that cannot manage it
-    at any investment. Each candidate is asked at its hardest-hitting ability,
-    so a pokemon that is dropped here cannot do it with any ability - which is
-    the point: no assumption about the opponent's set is needed to rule one
-    out. A candidate that stays may need an ability it does not always run, so
-    `.desc` on the result is worth reading before trusting it.
 
-    This is a filter to run *after* the SQL ones, not another Filter: it costs
-    two node processes per candidate, so narrow the field down first and hand
-    the survivors over.
+def _one_check(check: DamageFilter, candidates: Iterable[str]) -> dict[str, Investment]:
+    return {name: found[0] for name, found in check.run(candidates).items()}
 
-    The defender is calculated exactly as `defender_opts` describes it, which
-    means its ability defaults to the first slot rather than its most annoying
-    one. Thick Fat and friends have to be asked for.
+
+def _species_names(candidates: Iterable[str]) -> list[str]:
+    """Candidates as a list, with the one mistake worth catching caught.
+
+    A list of dex numbers reaches DuckDB as ints and fails deep inside an IN
+    clause with a cast error, so say what went wrong here instead: search()
+    returns whole rows, and its default columns start with the number.
     """
     names = list(candidates)
-    # A list of dex numbers reaches DuckDB as ints and fails deep inside the
-    # IN clause with a cast error, so say what went wrong here instead:
-    # search() returns whole rows, and its default columns start with number.
     wrong = next((n for n in names if not isinstance(n, str)), None)
     if wrong is not None:
         raise TypeError(
             f"candidates must be species names, got {wrong!r} - "
             'select them with search(..., columns="name")'
         )
-    if require_learns:
-        names = that_learn(move, names, db=db)
-
-    found = {}
-    for name in names:
-        best = most_damaging_ability(
-            name, move, defender,
-            # The strongest version of the question: max points in the stat
-            # the move uses, so nothing is ruled out for lack of investment.
-            attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
-            attacker_opts=attacker_opts,
-            defender_evs=defender_evs,
-            defender_opts=defender_opts,
-            move_opts=move_opts,
-            field_opts=field_opts,
-        )
-        investment = min_evs_to_ko(
-            name, move, defender,
-            percent=percent,
-            attacker_opts={**(attacker_opts or {}), "ability": best.names[0]},
-            defender_evs=defender_evs,
-            defender_opts=defender_opts,
-            move_opts=move_opts,
-            field_opts=field_opts,
-        )
-        if investment is not None:
-            found[name] = investment
-    return found
+    return names
