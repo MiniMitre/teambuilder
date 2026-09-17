@@ -72,3 +72,14 @@ def that_learn(move: str, names: list[str], *, db: Path = DB_PATH) -> list[str]:
     )
     learners = {row[0] for row in rows}
     return [name for name in names if name in learners]
+
+
+def learnset(name: str, db:Path = DB_PATH) -> list[str]: 
+
+    rows = _query(
+            "SELECT move FROM pokemon_moves WHERE pokemon = ?", 
+            [name], 
+            db=db
+    )
+    names = {row[0] for row in rows}
+    return list(names)
