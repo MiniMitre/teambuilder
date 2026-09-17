@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-main = "teambuilder.search:main"
+teambuilder = "teambuilder.main:app"
 build_db = "teambuilder.data:build"
 
 [build-system]
