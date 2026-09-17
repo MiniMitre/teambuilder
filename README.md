@@ -36,8 +36,9 @@ filters compose with `&` only for now - `|` is not built.
 
 ## Usage
 
-Set up the data and the calculator first - see the two sections below, which
-are the parts that need cloning - then:
+Requires - [UV (Python Project Manager)](https://docs.astral.sh/uv/) to be installed.
+
+Set up the data and the calculator first - see the two sections [Getting the champout data](#getting-the-champout-data) and [Getting the damage calculator](#getting-the-champout-data) below, which are the parts that need cloning - then:
 
 ```bash
 uv run teambuilder build-db                 # parse the dumps into DuckDB
@@ -85,7 +86,7 @@ this is not obvious if you have not used the Smogon calculator before. The
 full option list is in the [damage calculator](#getting-the-damage-calculator)
 section below.
 
-What you do *not* have to specify is anything intrinsic to the move itself:
+What you do _not_ have to specify is anything intrinsic to the move itself:
 always-crit moves such as Flower Trick already crit, multi-hit moves already
 roll their hits, and spread damage follows from the game type.
 
