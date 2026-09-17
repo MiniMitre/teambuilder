@@ -60,8 +60,10 @@ lists the rest.
 
 For anything the flags cannot express, `teambuilder raw` takes newline-
 delimited calculator requests on stdin and prints one JSON response per line.
-Everything the CLI does is a thin wrapper over `teambuilder.search` and
-`teambuilder.calc`, so the Python API is the better surface for a loop.
+Everything the CLI does is a thin wrapper over `teambuilder.filters` (the
+search conditions), `teambuilder.pokedex` (the queries), `teambuilder.damage`
+(the calculator-driven searches) and `teambuilder.calc` (the calculator
+itself), so the Python API is the better surface for a loop.
 
 ## Known caveats
 

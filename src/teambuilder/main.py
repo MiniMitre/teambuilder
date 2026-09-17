@@ -1,28 +1,21 @@
-"""Command line interface: search the pokedex and size up damage calculations.
-
-Every command is a thin wrapper over teambuilder.search and teambuilder.calc,
-so anything the CLI cannot express is still available from Python.
-"""
-
 import json
 
 import typer
 
 from teambuilder import data
 from teambuilder.calc import CalcError, build_request, calculate, move_category
-from teambuilder.search import (
-    Filter,
+from teambuilder.damage import min_evs_to_ko, min_evs_to_survive
+from teambuilder.filters import (
     STATS,
+    Filter,
     ability,
     has_type,
     learns,
     max_stat,
-    min_evs_to_ko,
-    min_evs_to_survive,
     min_stat,
-    search,
     stat_between,
 )
+from teambuilder.pokedex import search
 
 app = typer.Typer(
     help="Search the Champions pokedex and calculate damage.",
