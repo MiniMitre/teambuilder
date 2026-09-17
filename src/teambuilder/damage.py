@@ -51,6 +51,14 @@ def attacking_stat(move: str) -> str:
         raise ValueError(f"{move!r} is a Status move and deals no damage")
     return "spa" if category == "Special" else "atk"
 
+def relevant_defense_stat(attack_type:str) -> str:
+    if attack_type == "spa":
+        return "spd"
+    elif attack_type == "atk":
+        return "def"
+    else:
+        raise ValueError(f"{attack_type!r} is not in a valid attack type")
+
 
 def _evaluate(requests: list[dict]):
     """Runs every request through the calculator, yielding (response, Investment) pairs.
@@ -103,8 +111,9 @@ def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INV
         current_hp = inv.user_hp
         points = inv.points
         pct = PERCENT/100
-        calculated_HP = (ceil((dealt-pct*current_hp)/pct))
-        adjusted_HP = max(calculated_HP,0)
+        calculated_HP = ((dealt-pct*current_hp)/pct)
+        #Add a small amount to the caclculated HP, to make sure we always survive a hit (round up if needed)
+        adjusted_HP = max(ceil(calculated_HP + 0.01),0)
         total_points_used = adjusted_HP + points
 
         if minPoints > total_points_used:
@@ -143,7 +152,6 @@ def verify_Min_EVs (
         attacker, move, defender,
         attacker_evs=attacker_evs,
         attacker_opts=attacker_opts,
-        # Points go into `invest`; any other stats the caller set stay.
         defender_evs={**(defender_evs or {}), **pair},
         defender_opts=defender_opts,
         move_opts=move_opts,
@@ -296,7 +304,6 @@ def min_evs_to_survive(
     attacker: str,
     move: str,
     defender: str,
-    invest:str,
     *,
     percent: float = 100.0,
     attacker_opts: dict | None = None,
@@ -308,8 +315,9 @@ def min_evs_to_survive(
 ) -> Investment | None:
 
     hp = "hp"
+    invest = relevant_defense_stat(attacking_stat(move))
 
-    print(f"Minimum {hp}/{invest} for {defender} to take under {percent}% from {attacker} {move}:")
+    print(f"Minimum {hp}/{invest} for {defender} to survive {move}:")
     
     breakpoints = find_damage_breakpoints(
         attacker, move, defender,
@@ -324,10 +332,25 @@ def min_evs_to_survive(
 
     optimal_EVs = calculate_HP_from_Breakpoints(breakpoints,percent,hp,invest)
 
-    min_total = sum(optimal_EVs[0].values())
+    #Optimal_EV's is empty because we could not find a solution that survived
+    if not bool(optimal_EVs):
+        print(f"Cannot take less than {percent} damage:")
+        request = build_request(
+                attacker, move, defender,
+                attacker_evs=attacker_evs,
+                attacker_opts=attacker_opts,
+                defender_evs={"hp":32,"def":32,"spd":32},
+                defender_opts=defender_opts,
+                move_opts=move_opts,
+                field_opts=field_opts,
+            )
+        print(_all([request])[0].desc)
 
-    for res in verify_Min_EVs(optimal_EVs,attacker,move,defender,attacker_evs=attacker_evs,attacker_opts=attacker_opts):
-        print(f"{min_total} Points: {res.desc}")
+    else:
+        min_total = sum(optimal_EVs[0].values())
+
+        for res in verify_Min_EVs(optimal_EVs,attacker,move,defender,attacker_evs=attacker_evs,attacker_opts=attacker_opts):
+            print(f"{min_total} Points: {res.desc}")
 
 def find_damage_breakpoints(
     attacker: str,
@@ -510,7 +533,6 @@ def survive_filter(
     move: str,
     *,
     percent: float = 100.0,
-    invest: str = "hp",
     require_learns: bool = True,
     attacker_evs: dict | None = None,
     attacker_opts: dict | None = None,
@@ -541,13 +563,13 @@ def survive_filter(
                 attacker_evs=attacker_evs, attacker_opts=attacker_opts,
                 # Max points in the stat being invested, for the same reason
                 # ko_filter maxes the attacking stat before choosing.
-                defender_evs={invest: MAX_STAT_POINTS},
+                defender_evs={"hp": MAX_STAT_POINTS, "def":MAX_STAT_POINTS,"spd":MAX_STAT_POINTS},
                 defender_opts=defender_opts,
                 move_opts=move_opts, field_opts=field_opts,
             )
             investment = min_evs_to_survive(
                 attacker, move, name,
-                percent=percent, invest=invest,
+                percent=percent,
                 attacker_evs=attacker_evs, attacker_opts=attacker_opts,
                 defender_opts={**(defender_opts or {}), "ability": best.names[0]},
                 move_opts=move_opts, field_opts=field_opts,
@@ -557,8 +579,7 @@ def survive_filter(
         return kept
 
     threshold = "survives" if percent == 100.0 else f"takes under {percent}% from"
-    spread = "" if invest == "hp" else f" ({invest})"
-    return DamageFilter(f"{threshold} {move} from {attacker}{spread}", run)
+    return DamageFilter(f"{threshold} {move} from {attacker}", run)
 
 
 def can_ko(candidates: Iterable[str], move: str, defender: str, **options) -> dict[str, Investment]:

@@ -5,6 +5,7 @@ from teambuilder.damage import (
     can_ko_any_atk,
     min_evs_to_ko,
     min_evs_to_survive,
+    survive_filter,
 )
 from teambuilder.filters import (
     ability,
@@ -36,22 +37,18 @@ def main():
 
     print()
 
-    ATTACKER = "Rillaboom"
-    MOVE = "Wood Hammer"
-    DEFENDER = "Snorlax"
-    INVEST_IN = "def"
-    ATK = 32
-    PERCENT = 70
-    NATURE = "Adamant"
-    ITEM = "Miracle Seed"
+    min_evs_to_survive("Salamence-Mega","Hyper Voice","Ariados",percent=100,attacker_opts={"nature":"","item":""},attacker_evs={"spa":32})
 
-    min_evs_to_survive(ATTACKER,MOVE,DEFENDER,INVEST_IN,percent=PERCENT,attacker_opts={"nature":NATURE,"item":ITEM},attacker_evs={"atk":ATK})
+    slow = [row[0] for row in search(max_stat("spe", 45), columns="name")]
+    mence_survival = survive_filter("Salamence-Mega", "Hyper Voice", attacker_evs={"spa": 32 } )
+    for name, (investment, ) in mence_survival(slow).items(): 
+        print(f"  {name:<20} {investment.points} points to Survive") 
 
     print("Which pokemon can KO mega salamence with triple axel while being base 100 or higher")
     
     speedy = [row[0] for row in search(min_stat("spe", 100), columns="name")]
     for name, investment in can_ko(speedy, "Triple Axel", "Salamence-Mega").items():
-        print(f"  {name:<20} {investment.points} points")
+         print(f"  {name:<20} {investment.points} points")
 
 
     print()
