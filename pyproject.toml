@@ -15,7 +15,7 @@ dependencies = [
 [project.scripts]
 teambuilder = "teambuilder.main:app"
 build_db = "teambuilder.data:build"
-demo = "teambuilder.search:main"
+demo = "teambuilder.demo:main"
 
 [build-system]
 requires = ["uv_build>=0.12.14,<0.13.0"]
