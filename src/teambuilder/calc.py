@@ -1,4 +1,3 @@
-""
 
 import json
 import re
@@ -103,8 +102,9 @@ def _categories(gen: int) -> dict[str, str | None]:
 
 def _node(args: list[str], stdin: str = "") -> str:
     # cwd is the project root so node resolves @smogon/calc from node_modules.
-    # calc.js reports failures as JSON on stdout and the library writes its own
-    # warnings to stderr, so stderr only matters when nothing came back.
+    # calc.js keeps stdout to one JSON response per line - failures included -
+    # and pushes the library's own chatter to stderr, so stderr only matters
+    # when nothing came back at all.
     process = subprocess.run(
         ["node", *args], input=stdin, capture_output=True, text=True, cwd=ROOT
     )

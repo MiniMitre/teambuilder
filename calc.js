@@ -25,6 +25,13 @@
 // takes the number as-is (stats.ts: calcStatChampions). See STAT POINTS below.
 const {calculate, Generations, Pokemon, Move, Field} = require('@smogon/calc');
 
+// The library reports the errors it was told to suppress with console.log
+// (util.ts: error), which would land in the middle of the JSON on stdout - a
+// zero-damage roll prints two such lines. Anything it prints goes to stderr
+// instead, leaving stdout as one JSON response per line and nothing else.
+console.log = (...args) => console.error(...args);
+const write = (value) => process.stdout.write(JSON.stringify(value) + "\n");
+
 // Pokemon Champions is generation 0: calc.ts dispatches on MECHANICS[gen.num]
 // and slot 0 is calculateChampions, ahead of RBY at 1. That only exists in the
 // git checkout under damage-calc/ - the published @smogon/calc 0.11.0 stops at
@@ -134,6 +141,6 @@ for (const line of require('fs').readFileSync(0, 'utf8').split('\n')) {
     response = id === undefined ? {error: err.message} : {error: err.message, id};
     failed = true;
   }
-  console.log(JSON.stringify(response));
+  write(response);
 }
 if (failed) process.exitCode = 1;
