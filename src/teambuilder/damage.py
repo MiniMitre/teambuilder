@@ -22,6 +22,7 @@ class Investment(NamedTuple):
     damage: tuple[int, int]
     user_hp: int
     move: str | None = None        # set when the filter picked the move, not the caller
+    spread: dict[str, int] | None = None  # set when the points cover more than one stat
 
     def __str__(self):
         with_move = f" with {self.move}" if self.move else ""
@@ -322,11 +323,17 @@ def min_evs_to_survive(
     field_opts: dict | None = None,
 ) -> Investment | None:
 
+    """Fewest points across HP and the relevant defence to hold `move` under
+    `percent`%, or None if 32/32 cannot manage it.
+
+    Damage moves in steps, not smoothly, so this walks the breakpoints in the
+    defence the move actually attacks and works out how much HP each one needs;
+    the cheapest total wins. `.points` on the result is that total, across both
+    stats, and `.desc` names the spread that proves it.
+    """
     hp = "hp"
     invest = relevant_defense_stat(attacking_stat(move))
 
-    print(f"Minimum {hp}/{invest} for {defender} to survive {move}:")
-    
     breakpoints = find_damage_breakpoints(
         attacker, move, defender,
         invest=invest,
@@ -342,7 +349,7 @@ def min_evs_to_survive(
 
     #Optimal_EV's is empty because we could not find a solution that survived
     if not bool(optimal_EVs):
-        print(f"Cannot guarantee less than {percent}% damage:")
+        print(f"/nCannot take less than {percent} damage:")
         request = build_request(
                 attacker, move, defender,
                 attacker_evs=attacker_evs,
@@ -353,17 +360,21 @@ def min_evs_to_survive(
                 field_opts=field_opts,
             )
         print(_all([request])[0].desc)
+        return None
 
     else:
-        for res in verify_Min_EVs(
-            optimal_EVs,attacker,move,defender,
-            attacker_evs=attacker_evs,
-            attacker_opts=attacker_opts,
-            defender_evs=defender_evs,
-            defender_opts=defender_opts,
-            move_opts=move_opts,
-            field_opts=field_opts):
-            print(f"{res.points} Points: {res.desc}")
+        min_total = sum(optimal_EVs[0].values())
+
+        verified = verify_Min_EVs(
+        optimal_EVs, attacker, move, defender,
+        attacker_evs=attacker_evs, attacker_opts=attacker_opts,
+        defender_evs=defender_evs, defender_opts=defender_opts,
+        move_opts=move_opts, field_opts=field_opts,
+    )
+    # _evaluate numbers results by their position in the batch, so the points
+    # on a verified spread count nothing useful - put the real total back, and
+    # carry the split itself so callers do not have to read it out of the desc.
+        return verified[0]._replace(points=min_total, spread=optimal_EVs[0])
 
 def find_damage_breakpoints(
     attacker: str,
@@ -564,13 +575,20 @@ def survive_filter(
     The attacker is calculated as given, which is the same asymmetry ko_filter
     has with its defender: if the attacker's own ability matters, pass it in
     `attacker_opts`, or ask most_damaging_ability for it first.
+
+    Points are spread across HP and whichever defence the move attacks, since
+    min_evs_to_survive walks the damage breakpoints rather than pouring
+    everything into one stat - so `.points` is the total and `.desc` names the
+    split that earned it.
     """
     if require_learns and not that_learn(move, [attacker], db=db):
         raise ValueError(f"{attacker} does not learn {move}")
 
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         kept = {}
-        for name in _species_names(candidates):
+        # Two node processes per candidate, same as ko_filter, so a roster-sized
+        # list runs for minutes with nothing to show for it otherwise.
+        for name in tqdm(_species_names(candidates), desc=f"Surviving {move} from {attacker}"):
             best = least_damaged_ability(
                 name, attacker, move,
                 attacker_evs=attacker_evs, attacker_opts=attacker_opts,
