@@ -17,6 +17,14 @@ from teambuilder.filters import (
 )
 from teambuilder.pokedex import search
 
+def print_survival_result(attacker, move, defender, **kwargs):
+    result = min_evs_to_survive(attacker, move, defender, **kwargs)
+    print(f"{attacker} {move} vs {defender}:")
+    if result:
+        for inv in result:
+            print(f"  {inv}")
+    else:
+        print("  No viable spread found")
 
 def main():
     f = (
@@ -37,10 +45,28 @@ def main():
     print(" ", min_evs_to_ko("Blaziken", "Close Combat", "Incineroar", defender_evs={"def": 12}))
 
     print()
+    print_survival_result(
+        "Salamence-Mega",
+        "Hyper Voice",
+        "Ariados",
+        percent=100,
+        attacker_opts={"item":""},
+        attacker_evs="32",
+        showAll=True
+    )
 
-    min_evs_to_survive("Salamence-Mega","Hyper Voice","Ariados",percent=100,attacker_opts={"nature":"","item":""},attacker_evs={"spa":32})
-    min_evs_to_survive("Sneasler","Close Combat","Kingambit",percent=100,attacker_opts={"nature":"Adamant","item":""},attacker_evs={"atk":32},defender_opts={"item":"Chople Berry"},field_opts={"terrain":"Psychic"},showAll=True)
-
+    print()
+    print_survival_result(
+        "Sneasler",
+        "Close Combat",
+        "Kingambit",
+        percent=100,
+        attacker_opts={"item":""},
+        attacker_evs="32+",
+        defender_opts={"item":"Chople Berry"},
+        field_opts={"terrain":"Psychic"},
+        showAll=False
+    )
     slow = [row[0] for row in search(max_stat("spe", 45), columns="name")]
     mence_survival = survive_filter("Salamence-Mega", "Hyper Voice", attacker_evs={"spa": 32 } )
     for name, (investment, ) in mence_survival(slow).items(): 

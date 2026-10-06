@@ -106,6 +106,7 @@ def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INV
     #Initialise the min points used at 32/32
     minPoints:int = 64
     minPairs:list[dict[str, int]] = []
+    allPairs:list[dict[str, int]] = []
 
     for inv in breakpoints:
         dealt = inv.damage[1]
@@ -122,7 +123,7 @@ def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INV
         total_points_used = adjusted_HP + points
 
         if showAll:
-            minPairs.append(({HP: adjusted_HP, INVEST_IN: points}))
+            allPairs.append({HP: adjusted_HP, INVEST_IN: points})
             continue
 
         if minPoints > total_points_used:
@@ -140,7 +141,9 @@ def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INV
         if calculated_HP < 0:
             #We do not need to check any more values
             break
-    
+    if showAll:
+        return allPairs
+
     return minPairs
 
 def verify_Min_EVs (
@@ -316,12 +319,12 @@ def min_evs_to_survive(
     percent: float = 100.0,
     showAll = False,
     attacker_opts: dict | None = None,
-    attacker_evs: dict | None = None,
+    attacker_evs: dict | str | None = None,
     defender_evs: dict | None = None,
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
-) -> Investment | None:
+) -> list[Investment] | None:
 
     """Fewest points across HP and the relevant defence to hold `move` under
     `percent`%, or None if 32/32 cannot manage it.
@@ -330,9 +333,33 @@ def min_evs_to_survive(
     defence the move actually attacks and works out how much HP each one needs;
     the cheapest total wins. `.points` on the result is that total, across both
     stats, and `.desc` names the spread that proves it.
+
+    `attacker_evs` can be:
+    - A string like "32" for 32 investment in the relevant stat
+    - A string like "32+" for 32 investment with maximizing nature (Adamant/Modest)
+    - A string like "0-" for 0 investment with minimizing nature
+    - A dict for full EV spread control
     """
     hp = "hp"
     invest = relevant_defense_stat(attacking_stat(move))
+
+    # If attacker_evs is a string, parse it
+    if isinstance(attacker_evs, str):
+        stat = attacking_stat(move)
+        if attacker_evs.endswith("+"):
+            ev_value = int(attacker_evs[:-1])
+            attacker_evs = {stat: ev_value}
+            maximizing_nature = "Adamant" if stat == "atk" else "Modest"
+            attacker_opts = {**(attacker_opts or {}), "nature": maximizing_nature}
+        elif attacker_evs.endswith("-"):
+            ev_value = int(attacker_evs[:-1])
+            attacker_evs = {stat: ev_value}
+            minimizing_nature = "Modest" if stat == "atk" else "Adamant"
+            attacker_opts = {**(attacker_opts or {}), "nature": minimizing_nature}
+        else:
+            # Plain number string
+            ev_value = int(attacker_evs)
+            attacker_evs = {stat: ev_value}
 
     breakpoints = find_damage_breakpoints(
         attacker, move, defender,
@@ -349,22 +376,9 @@ def min_evs_to_survive(
 
     #Optimal_EV's is empty because we could not find a solution that survived
     if not bool(optimal_EVs):
-        print(f"/nCannot take less than {percent} damage:")
-        request = build_request(
-                attacker, move, defender,
-                attacker_evs=attacker_evs,
-                attacker_opts=attacker_opts,
-                defender_evs={"hp":32,"def":32,"spd":32},
-                defender_opts=defender_opts,
-                move_opts=move_opts,
-                field_opts=field_opts,
-            )
-        print(_all([request])[0].desc)
         return None
 
     else:
-        min_total = sum(optimal_EVs[0].values())
-
         verified = verify_Min_EVs(
         optimal_EVs, attacker, move, defender,
         attacker_evs=attacker_evs, attacker_opts=attacker_opts,
@@ -374,7 +388,10 @@ def min_evs_to_survive(
     # _evaluate numbers results by their position in the batch, so the points
     # on a verified spread count nothing useful - put the real total back, and
     # carry the split itself so callers do not have to read it out of the desc.
-        return verified[0]._replace(points=min_total, spread=optimal_EVs[0])
+        return [
+            verified[i]._replace(points=sum(optimal_EVs[i].values()), spread=optimal_EVs[i])
+            for i in range(len(verified))
+        ]
 
 def find_damage_breakpoints(
     attacker: str,
