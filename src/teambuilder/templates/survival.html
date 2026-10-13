@@ -1,0 +1,1618 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<title>Pok&eacute;mon Survival Calculator</title>
+		<link rel="icon" type="image/x-icon" href="/static/img/favicon.png" />
+		<link
+			type="text/css"
+			rel="stylesheet"
+			href="/static/js/vendor/select2/select2.css"
+		/>
+		<link type="text/css" rel="stylesheet" href="/static/css/main.css?" />
+		<link
+			type="text/css"
+			rel="stylesheet"
+			href="/static/css/vendor/bootstrap.css"
+		/>
+		<link
+			type="text/css"
+			rel="stylesheet"
+			href="/static/css/dark-theme.css?"
+			id="dark-theme-styles"
+		/>
+		<script>
+			if (
+				(localStorage.getItem("darkTheme") ||
+					"" +
+						window.matchMedia("(prefers-color-scheme: dark)").matches) ===
+				"false"
+			) {
+				document.getElementById("dark-theme-styles").disabled = true;
+			}
+		</script>
+	</head>
+
+	<body class="dark-theme">
+		<!-- START WRAPPER -->
+		<div class="wrapper">
+			<span class="title-text main-title-text"
+				>Pok&eacute;mon Survival Calculator</span
+			>
+			<div aria-label="Settings" role="region">
+				<span
+					class="modeSelection"
+					aria-labelledby="selectResultsInstruction"
+					role="radiogroup"
+					title="Select results display."
+				>
+					<span class="visually-hidden" id="selectResultsInstruction"
+						>Select results display.</span
+					>
+					<input
+						class="mode visually-hidden"
+						type="radio"
+						name="results"
+						id="minOnly"
+						checked="checked"
+					/><label class="btn btn-left btn-wide" for="minOnly"
+						>Minimum Only</label
+					>
+					<input
+						class="mode visually-hidden"
+						type="radio"
+						name="results"
+						id="allResults"
+					/><label class="btn btn-right btn-wide" for="allResults"
+						>All Results</label
+					>
+				</span>
+			</div>
+			<hr />
+
+			<div
+				aria-label="Calculation results"
+				class="main-result-group"
+				role="region"
+			>
+				<div class="big-text">
+					<span id="mainResult" title="Click to copy."
+						>Select Pokemon and Move to Calculate</span
+					>
+					<div id="tooltipText">Copied</div>
+					<button
+						id="calculate-btn"
+						class="btn btn-wide"
+						style="margin-left: 20px"
+					>
+						Calculate
+					</button>
+				</div>
+				<div class="small-text">
+					<div id="resultDesc" style="margin-top: 8px"></div>
+					<table id="resultTable" class="result-table"></table>
+				</div>
+			</div>
+
+			<div aria-label="Attacker" class="panel" role="region">
+				<fieldset class="poke-info" id="p1">
+					<legend align="center">Attacker</legend>
+					<select
+						class="set-selector"
+						id="attacker-input"
+						style="width: 100%"
+					>
+						<option value="">Select Pokemon</option>
+					</select>
+
+					<div class="info-group top">
+						<div>
+							<label>Move</label>
+							<select
+								id="move-select"
+								class="calc-trigger"
+								style="width: 200px"
+							></select>
+						</div>
+					</div>
+
+					<div class="info-group">
+						<div>
+							<label>Ability</label>
+							<select
+								id="abilityL1"
+								class="ability calc-trigger"
+								style="width: 200px"
+							></select>
+						</div>
+						<div>
+							<label>Item</label>
+							<select
+								id="itemL1"
+								class="item calc-trigger"
+								style="width: 200px"
+							></select>
+						</div>
+					</div>
+
+					<div class="info-group">
+						<div>
+							<label>Attacking EVs</label>
+							<input
+								type="text"
+								id="attacker-evs"
+								class="calc-trigger"
+								value="32"
+								style="width: 60px"
+							/>
+						</div>
+						<div>
+							<label></label>
+							<select
+								id="attacker-boost"
+								class="calc-trigger"
+								style="width: 60px"
+							>
+								<option value="6">+6</option>
+								<option value="5">+5</option>
+								<option value="4">+4</option>
+								<option value="3">+3</option>
+								<option value="2">+2</option>
+								<option value="1">+1</option>
+								<option value="0" selected>0</option>
+								<option value="-1">-1</option>
+								<option value="-2">-2</option>
+								<option value="-3">-3</option>
+								<option value="-4">-4</option>
+								<option value="-5">-5</option>
+								<option value="-6">-6</option>
+							</select>
+						</div>
+					</div>
+					<div class="info-group">
+						<div>
+							<small style="color: #888"
+								>(Add + for +nature, - for -nature)</small
+							>
+						</div>
+					</div>
+				</fieldset>
+			</div>
+
+			<div class="panel">
+				<div aria-label="Field information" role="region">
+					<fieldset class="field-info">
+						<legend align="center">Field</legend>
+
+						<div
+							aria-labelledby="selectBattleFormatInstruction"
+							role="radiogroup"
+							style="width: 10.6em; margin: 0 auto 5px"
+							title="Select the battle format."
+						>
+							<span
+								class="visually-hidden"
+								id="selectBattleFormatInstruction"
+								>Select the battle format.</span
+							>
+							<input
+								class="visually-hidden calc-trigger"
+								type="radio"
+								name="format"
+								value="singles"
+								id="singles-format"
+								checked="checked"
+							/>
+							<label class="btn btn-left" for="singles-format"
+								>Singles</label
+							>
+							<input
+								class="visually-hidden calc-trigger"
+								type="radio"
+								name="format"
+								value="doubles"
+								id="doubles-format"
+							/>
+							<label class="btn btn-right" for="doubles-format"
+								>Doubles</label
+							>
+						</div>
+
+						<div
+							aria-labelledby="selectTerrainInstruction"
+							role="radiogroup"
+							title="Select the current terrain."
+						>
+							<span class="visually-hidden" id="selectTerrainInstruction"
+								>Select the current terrain.</span
+							>
+							<input
+								class="visually-hidden terrain-trigger calc-trigger"
+								type="radio"
+								name="terrain"
+								value=""
+								id="no-terrain"
+								checked="checked"
+							/><label class="btn btn-left" for="no-terrain">None</label>
+							<input
+								class="visually-hidden terrain-trigger calc-trigger"
+								type="radio"
+								name="terrain"
+								value="Electric"
+								id="electric"
+							/><label class="btn btn-mid" for="electric"
+								>Electric</label
+							>
+							<input
+								class="visually-hidden terrain-trigger calc-trigger"
+								type="radio"
+								name="terrain"
+								value="Grassy"
+								id="grassy"
+							/><label class="btn btn-mid" for="grassy">Grassy</label>
+							<input
+								class="visually-hidden terrain-trigger calc-trigger"
+								type="radio"
+								name="terrain"
+								value="Misty"
+								id="misty"
+							/><label class="btn btn-mid" for="misty">Misty</label>
+							<input
+								class="visually-hidden terrain-trigger calc-trigger"
+								type="radio"
+								name="terrain"
+								value="Psychic"
+								id="psychic"
+							/><label class="btn btn-right" for="psychic"
+								>Psychic</label
+							>
+						</div>
+						<hr />
+
+						<div
+							aria-labelledby="selectWeatherInstruction"
+							role="radiogroup"
+						>
+							<span class="visually-hidden" id="selectWeatherInstruction"
+								>Select the current weather condition.</span
+							>
+							<div
+								style="width: 22.2em; margin: 5px auto"
+								title="Select the current weather condition."
+							>
+								<input
+									class="weather visually-hidden calc-trigger"
+									type="radio"
+									name="weather"
+									value=""
+									id="clear"
+									checked="checked"
+								/>
+								<label class="btn btn-small btn-left" for="clear"
+									>None</label
+								>
+								<input
+									class="weather visually-hidden calc-trigger"
+									type="radio"
+									name="weather"
+									value="Sun"
+									id="sun"
+								/>
+								<label class="btn btn-small btn-mid" for="sun"
+									>Sun</label
+								>
+								<input
+									class="weather visually-hidden calc-trigger"
+									type="radio"
+									name="weather"
+									value="Rain"
+									id="rain"
+								/>
+								<label class="btn btn-small btn-mid" for="rain"
+									>Rain</label
+								>
+								<input
+									class="weather visually-hidden calc-trigger"
+									type="radio"
+									name="weather"
+									value="Sand"
+									id="sand"
+								/>
+								<label class="btn btn-small btn-mid" for="sand"
+									>Sand</label
+								>
+								<input
+									class="weather visually-hidden calc-trigger"
+									type="radio"
+									name="weather"
+									value="Snow"
+									id="snow"
+								/>
+								<label class="btn btn-small btn-right" for="snow"
+									>Snow</label
+								>
+							</div>
+						</div>
+						<hr />
+
+						<div
+							aria-labelledby="selectFieldStateInstruction"
+							role="group"
+						>
+							<span
+								class="visually-hidden"
+								id="selectFieldStateInstruction"
+								>Select the current field state.</span
+							>
+							<div
+								style="width: 22.2em; margin: 5px auto"
+								title="Select the current field state."
+							>
+								<input
+									class="field-state visually-hidden calc-trigger"
+									type="checkbox"
+									name="fieldState"
+									value="Gravity"
+									id="gravity"
+								/>
+								<label class="btn btn-small btn-left" for="gravity"
+									>Gravity</label
+								>
+								<input
+									class="field-state visually-hidden calc-trigger"
+									type="checkbox"
+									name="fieldState"
+									value="MagicRoom"
+									id="magic-room"
+								/>
+								<label class="btn btn-small btn-mid" for="magic-room"
+									>Magic Room</label
+								>
+								<input
+									class="field-state visually-hidden calc-trigger"
+									type="checkbox"
+									name="fieldState"
+									value="WonderRoom"
+									id="wonder-room"
+								/>
+								<label class="btn btn-small btn-right" for="wonder-room"
+									>Wonder Room</label
+								>
+							</div>
+						</div>
+						<hr />
+
+						<table class="field">
+							<thead>
+								<tr>
+									<th scope="col">
+										<div class="visually-hidden">Attacker's side</div>
+									</th>
+									<th scope="col">
+										<div class="visually-hidden">Defender's side</div>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<div hidden id="selectStealthRockInstruction">
+										Is Stealth Rock affecting this side of the field?
+									</div>
+									<td>
+										<div
+											class="left"
+											title="Is Stealth Rock affecting this side of the field?"
+										>
+											<input
+												aria-describedby="selectStealthRockInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="srL"
+											/>
+											<label class="btn btn-xwide" for="srL"
+												>Stealth Rock</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is Stealth Rock affecting this side of the field?"
+										>
+											<input
+												aria-describedby="selectStealthRockInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="srR"
+											/>
+											<label class="btn btn-xwide" for="srR"
+												>Stealth Rock</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<div hidden id="selectSpikeInstruction">
+										Are there Spikes on this side of the field?
+									</div>
+									<td>
+										<div
+											aria-labelledby="selectSpikeInstruction"
+											class="left"
+											role="radiogroup"
+											title="Are there Spikes on this side of the field?"
+										>
+											<input
+												class="visually-hidden calc-trigger"
+												type="radio"
+												name="spikesL"
+												value="0"
+												id="spikesL0"
+												checked="checked"
+											/>
+											<label
+												class="btn btn-xsmall btn-left"
+												for="spikesL0"
+												>0</label
+											>
+											<input
+												class="visually-hidden calc-trigger"
+												type="radio"
+												name="spikesL"
+												value="1"
+												id="spikesL1"
+											/>
+											<label
+												class="btn btn-xsmall btn-mid"
+												for="spikesL1"
+												>1</label
+											>
+											<input
+												class="visually-hidden calc-trigger"
+												type="radio"
+												name="spikesL"
+												value="2"
+												id="spikesL2"
+											/>
+											<label
+												class="btn btn-xsmall btn-mid"
+												for="spikesL2"
+												>2</label
+											>
+											<input
+												class="visually-hidden calc-trigger"
+												type="radio"
+												name="spikesL"
+												value="3"
+												id="spikesL3"
+											/>
+											<label
+												class="btn btn-wide btn-right"
+												for="spikesL3"
+												>3 Spikes</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											aria-labelledby="selectSpikeInstruction"
+											class="right"
+											role="radiogroup"
+											title="Are there Spikes on this side of the field?"
+										>
+											<input
+												class="visually-hidden calc-trigger"
+												type="radio"
+												name="spikesR"
+												value="0"
+												id="spikesR0"
+												checked="checked"
+											/>
+											<label
+												class="btn btn-xsmall btn-left"
+												for="spikesR0"
+												>0</label
+											>
+											<input
+												class="visually-hidden calc-trigger"
+												type="radio"
+												name="spikesR"
+												value="1"
+												id="spikesR1"
+											/>
+											<label
+												class="btn btn-xsmall btn-mid"
+												for="spikesR1"
+												>1</label
+											>
+											<input
+												class="visually-hidden calc-trigger"
+												type="radio"
+												name="spikesR"
+												value="2"
+												id="spikesR2"
+											/>
+											<label
+												class="btn btn-xsmall btn-mid"
+												for="spikesR2"
+												>2</label
+											>
+											<input
+												class="visually-hidden calc-trigger"
+												type="radio"
+												name="spikesR"
+												value="3"
+												id="spikesR3"
+											/>
+											<label
+												class="btn btn-wide btn-right"
+												for="spikesR3"
+												>3 Spikes</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is this Pok&eacute;mon protected by Reflect and/or Light Screen?"
+										>
+											<div hidden id="selectScreenInstruction">
+												Is this Pok&eacute;mon protected by Reflect
+												and/or Light Screen?
+											</div>
+											<input
+												aria-describedby="selectScreenInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="reflectL"
+											/>
+											<label class="btn btn-left" for="reflectL"
+												>Reflect</label
+											>
+											<input
+												aria-describedby="selectScreenInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="lightScreenL"
+											/>
+											<label
+												class="btn btn-xwide btn-right"
+												for="lightScreenL"
+												>Light Screen</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is this Pok&eacute;mon protected by Reflect and/or Light Screen?"
+										>
+											<input
+												aria-describedby="selectScreenInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="lightScreenR"
+											/>
+											<label
+												class="btn btn-xwide btn-left"
+												for="lightScreenR"
+												>Light Screen</label
+											>
+											<input
+												aria-describedby="selectScreenInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="reflectR"
+											/>
+											<label class="btn btn-right" for="reflectR"
+												>Reflect</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is the Pok&eacute;mon protected by an ally's Friend Guard?"
+										>
+											<div hidden id="selectFriendGuardInstruction">
+												Is the Pok&eacute;mon protected by an ally's
+												Friend Guard?
+											</div>
+											<input
+												aria-describedby="selectFriendGuardInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="friendGuardL"
+											/>
+											<label
+												class="btn btn-xxwide"
+												for="friendGuardL"
+												>Friend Guard</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is the Pok&eacute;mon protected by an ally's Friend Guard?"
+										>
+											<input
+												aria-describedby="selectFriendGuardInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="friendGuardR"
+											/>
+											<label
+												class="btn btn-xxwide"
+												for="friendGuardR"
+												>Friend Guard</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is the Pok&eacute;mon protected by an ally's Aurora Veil?"
+										>
+											<div hidden id="selectAuroraVeilInstruction">
+												Is the Pok&eacute;mon protected by an ally's
+												Aurora Veil?
+											</div>
+											<input
+												aria-describedby="selectAuroraVeilInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="auroraVeilL"
+											/>
+											<label class="btn btn-xxwide" for="auroraVeilL"
+												>Aurora Veil</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is the Pok&eacute;mon protected by an ally's Aurora Veil?"
+										>
+											<input
+												aria-describedby="selectAuroraVeilInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="auroraVeilR"
+											/>
+											<label class="btn btn-xxwide" for="auroraVeilR"
+												>Aurora Veil</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is this Pok&eacute;mon protected?"
+										>
+											<div hidden id="selectProtectInstruction">
+												Is this Pok&eacute;mon protected?
+											</div>
+											<input
+												aria-describedby="selectProtectInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="protectL"
+											/>
+											<label class="btn btn-wide" for="protectL"
+												>Protect</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is this Pok&eacute;mon protected?"
+										>
+											<input
+												aria-describedby="selectProtectInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="protectR"
+											/>
+											<label class="btn btn-wide" for="protectR"
+												>Protect</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon been affected by Leech Seed?"
+										>
+											<div hidden id="selectLeechSeedInstruction">
+												Has this Pok&eacute;mon been affected by
+												Leech Seed?
+											</div>
+											<input
+												aria-describedby="selectLeechSeedInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="leechSeedL"
+											/>
+											<label class="btn btn-wide" for="leechSeedL"
+												>Leech Seed</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon been affected by Leech Seed?"
+										>
+											<input
+												aria-describedby="selectLeechSeedInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="leechSeedR"
+											/>
+											<label class="btn btn-wide" for="leechSeedR"
+												>Leech Seed</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon been affected by Salt Cure?"
+										>
+											<div hidden id="selectSaltCureInstruction">
+												Has this Pok&eacute;mon been affected by
+												Salt Cure?
+											</div>
+											<input
+												aria-describedby="selectSaltCureInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="saltCureL"
+											/>
+											<label class="btn btn-wide" for="saltCureL"
+												>Salt Cure</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon been affected by Salt Cure?"
+										>
+											<input
+												aria-describedby="selectSaltCureInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="saltCureR"
+											/>
+											<label class="btn btn-wide" for="saltCureR"
+												>Salt Cure</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon powered up with Charge?"
+										>
+											<div hidden id="selectChargeInstruction">
+												Has this Pok&eacute;mon powered up with
+												Charge?
+											</div>
+											<input
+												aria-describedby="selectChargeInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="chargeL"
+											/>
+											<label class="btn btn-wide" for="chargeL"
+												>Charge</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon powered up with Charge?"
+										>
+											<input
+												aria-describedby="selectChargeInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="chargeR"
+											/>
+											<label class="btn btn-wide" for="chargeR"
+												>Charge</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon's power been boosted by an ally's Helping Hand?"
+										>
+											<div hidden id="selectHelpingHandInstruction">
+												Has this Pok&eacute;mon's power been boosted
+												by an ally's Helping Hand?
+											</div>
+											<input
+												aria-describedby="selectHelpingHandInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="helpingHandL"
+											/>
+											<label
+												class="btn btn-xxwide"
+												for="helpingHandL"
+												>Helping Hand</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon's power been boosted by an ally's Helping Hand?"
+										>
+											<input
+												aria-describedby="selectHelpingHandInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="helpingHandR"
+											/>
+											<label
+												class="btn btn-xxwide"
+												for="helpingHandR"
+												>Helping Hand</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon's speed been boosted by Tailwind?"
+										>
+											<div hidden id="selectTailwindInstruction">
+												Has this Pok&eacute;mon's speed been boosted
+												by Tailwind?
+											</div>
+											<input
+												aria-describedby="selectTailwindInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="tailwindL"
+											/>
+											<label class="btn btn-xxwide" for="tailwindL"
+												>Tailwind</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon's speed been boosted by Tailwind?"
+										>
+											<input
+												aria-describedby="selectTailwindInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="tailwindR"
+											/>
+											<label class="btn btn-xxwide" for="tailwindR"
+												>Tailwind</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is the Pok&eacute;mon affected by Power Trick?"
+										>
+											<div hidden id="selectPowerTrickInstruction">
+												Is the Pok&eacute;mon affected by Power
+												Trick?
+											</div>
+											<input
+												aria-describedby="selectPowerTrickInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="powerTrickL"
+											/>
+											<label class="btn btn-xxwide" for="powerTrickL"
+												>Power Trick</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is the Pok&eacute;mon affected by Power Trick?"
+										>
+											<input
+												aria-describedby="selectPowerTrickInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="powerTrickR"
+											/>
+											<label class="btn btn-xxwide" for="powerTrickR"
+												>Power Trick</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has the Pok&eacute;mon boosted all its stats one stage?"
+										>
+											<div hidden id="selectStatBoostInstruction">
+												Has the Pok&eacute;mon boosted all its stats
+												one stage?
+											</div>
+											<input
+												aria-describedby="selectStatBoostInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="StatBoostL"
+											/>
+											<label class="btn btn-xxwide" for="StatBoostL"
+												>+1 All Stats</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has the Pok&eacute;mon boosted all its stats one stage?"
+										>
+											<input
+												aria-describedby="selectStatBoostInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="StatBoostR"
+											/>
+											<label class="btn btn-xxwide" for="StatBoostR"
+												>+1 All Stats</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is the defending Pok&eacute;mon switching out?"
+										>
+											<div hidden id="selectSwitchingInstruction">
+												Is the defending Pok&eacute;mon switching
+												out?
+											</div>
+											<input
+												aria-describedby="selectSwitchingInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="switchingL"
+											/>
+											<label class="btn btn-xxwide" for="switchingL"
+												>Switching Out</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is the defending Pok&eacute;mon switching out?"
+										>
+											<input
+												aria-describedby="selectSwitchingInstruction"
+												class="visually-hidden calc-trigger"
+												type="checkbox"
+												id="switchingR"
+											/>
+											<label class="btn btn-xxwide" for="switchingR"
+												>Switching Out</label
+											>
+										</div>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+
+						<div class="info-group" style="margin-top: 10px">
+							<div>
+								<label>Survival Threshold (%)</label>
+								<input
+									type="number"
+									id="survival-percent"
+									class="calc-trigger"
+									value="100"
+									min="0"
+									max="100"
+									style="width: 60px"
+								/>
+							</div>
+						</div>
+
+						<button
+							id="calculate-btn"
+							class="btn btn-wide"
+							style="width: 100%; margin-top: 10px"
+						>
+							Calculate Survival
+						</button>
+					</fieldset>
+				</div>
+			</div>
+
+			<div aria-label="Defender" role="region" class="panel">
+				<fieldset class="poke-info" id="p2">
+					<legend align="center">Defender</legend>
+					<select
+						class="set-selector"
+						id="defender-input"
+						style="width: 100%"
+					>
+						<option value="">Select Pokemon</option>
+					</select>
+
+					<div class="info-group">
+						<div>
+							<label>Ability</label>
+							<select
+								id="abilityR1"
+								class="ability calc-trigger"
+								style="width: 200px"
+							></select>
+						</div>
+						<div>
+							<label>Item</label>
+							<select
+								id="itemR1"
+								class="item calc-trigger"
+								style="width: 200px"
+							></select>
+						</div>
+					</div>
+
+					<div class="info-group">
+						<table>
+							<thead>
+								<tr>
+									<th></th>
+									<th scope="col">Base</th>
+									<th scope="col">SPs</th>
+									<th></th>
+									<th scope="col"></th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr class="hp">
+									<th scope="row">
+										<label>HP</label>
+									</th>
+									<td>
+										<input
+											class="base calc-trigger"
+											value="100"
+											inputmode="decimal"
+											id="defender-hp-base"
+										/>
+									</td>
+									<td>
+										<input
+											class="sps calc-trigger"
+											type="number"
+											min="0"
+											max="32"
+											value="0"
+											inputmode="decimal"
+											id="defender-hp-sps"
+										/>
+									</td>
+									<td><span class="total">341</span></td>
+									<td></td>
+								</tr>
+								<tr class="df">
+									<th scope="row">
+										<label>Def</label>
+									</th>
+									<td>
+										<input
+											class="base calc-trigger"
+											value="100"
+											inputmode="decimal"
+											id="defender-def-base"
+										/>
+									</td>
+									<td>
+										<input
+											class="sps calc-trigger"
+											type="number"
+											min="0"
+											max="32"
+											value="0"
+											inputmode="decimal"
+											id="defender-def-sps"
+										/>
+									</td>
+									<td><span class="total">236</span></td>
+									<td>
+										<select class="boost calc-trigger" id="def-boost">
+											<option value="6">+6</option>
+											<option value="5">+5</option>
+											<option value="4">+4</option>
+											<option value="3">+3</option>
+											<option value="2">+2</option>
+											<option value="1">+1</option>
+											<option value="0" selected>0</option>
+											<option value="-1">-1</option>
+											<option value="-2">-2</option>
+											<option value="-3">-3</option>
+											<option value="-4">-4</option>
+											<option value="-5">-5</option>
+											<option value="-6">-6</option>
+										</select>
+									</td>
+								</tr>
+								<tr class="sd">
+									<th scope="row">
+										<label>SpD</label>
+									</th>
+									<td>
+										<input
+											class="base calc-trigger"
+											value="100"
+											inputmode="decimal"
+											id="defender-spd-base"
+										/>
+									</td>
+									<td>
+										<input
+											class="sps calc-trigger"
+											type="number"
+											min="0"
+											max="32"
+											value="0"
+											inputmode="decimal"
+											id="defender-spd-sps"
+										/>
+									</td>
+									<td><span class="total">236</span></td>
+									<td>
+										<select class="boost calc-trigger" id="spd-boost">
+											<option value="6">+6</option>
+											<option value="5">+5</option>
+											<option value="4">+4</option>
+											<option value="3">+3</option>
+											<option value="2">+2</option>
+											<option value="1">+1</option>
+											<option value="0" selected>0</option>
+											<option value="-1">-1</option>
+											<option value="-2">-2</option>
+											<option value="-3">-3</option>
+											<option value="-4">-4</option>
+											<option value="-5">-5</option>
+											<option value="-6">-6</option>
+										</select>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</fieldset>
+			</div>
+		</div>
+
+		<script
+			type="text/javascript"
+			src="/static/js/vendor/jquery-1.9.1.min.js"
+		></script>
+		<script
+			type="text/javascript"
+			src="/static/js/vendor/select2/select2.min.js"
+		></script>
+		<script>
+			$(document).ready(function () {
+				let lastResults = null; // results from the most recent calculation
+				let lastWasAll = false; // whether that calculation was run in All Results mode
+
+				function renderResults() {
+					const $table = $("#resultTable").empty();
+					const $desc = $("#resultDesc").empty();
+					if (!lastResults || lastResults.length === 0) return;
+
+					const esc = (s) => $("<div>").text(s).html();
+					const minPoints = Math.min(...lastResults.map((r) => r.points));
+					$("#mainResult").text(minPoints + " points");
+
+					// Minimum Only hides everything above the minimum
+					const showAll = $("#allResults").is(":checked");
+					const rows = showAll
+						? lastResults
+						: lastResults.filter((r) => r.points === minPoints);
+
+					// Full description from the first row, minus what the table already shows:
+					// the "3 HP / 6 SpD" investment and the ": 150-177 (84.2 - 99.4%) -- guaranteed 2HKO" tail
+					const cleanDesc = (d) =>
+						d
+							.replace(/\d+ HP \/ \d+ \w+ /, "")
+							.replace(/:\s*\d+-\d+ \(.*$/, "");
+					$desc.text(cleanDesc(rows[0].desc));
+
+					// Which defensive stat was invested in: the spread key that isn't hp
+					const defKey = rows[0].spread
+						? Object.keys(rows[0].spread).find((k) => k !== "hp")
+						: null;
+					const defLabel = defKey === "spd" ? "SpD" : "Def";
+
+					let html =
+						'<tr><th class="num">Points</th><th class="num">HP</th>' +
+						'<th class="num">' +
+						defLabel +
+						"</th><th>Damage</th><th>Result</th></tr>";
+
+					rows.forEach((r) => {
+						const hpEv = r.spread ? r.spread.hp : "?";
+						const defEv = r.spread && defKey ? r.spread[defKey] : "?";
+						const dmg = r.damage[0] + "-" + r.damage[1];
+						const pct = "(" + r.percent[0] + " - " + r.percent[1] + "%)";
+						const ko = r.desc.split(" -- ")[1] || "";
+
+						html +=
+							"<tr" +
+							(r.points === minPoints ? ' class="min"' : "") +
+							">" +
+							'<td class="num">' +
+							r.points +
+							"</td>" +
+							'<td class="num">' +
+							hpEv +
+							"</td>" +
+							'<td class="num">' +
+							defEv +
+							"</td>" +
+							"<td>" +
+							dmg +
+							" " +
+							pct +
+							"</td>" +
+							"<td>" +
+							esc(ko) +
+							"</td>" +
+							"</tr>";
+					});
+
+					$table.html(html);
+				}
+
+				// Toggle between modes without a manual re-calculate
+				$("#minOnly").on("change", function () {
+					if (lastResults) renderResults();
+				});
+
+				$("#allResults").on("change", function () {
+					if (!lastResults) return;
+					if (lastWasAll) {
+						renderResults(); // already have every row
+					} else {
+						$("#calculate-btn").click(); // server only sent the minimums, so refetch
+					}
+				});
+				// Initialize Select2 for Pokemon dropdowns
+				$("#attacker-input").select2({
+					placeholder: "Select Pokemon",
+					allowClear: true,
+					width: "100%",
+				});
+
+				$("#defender-input").select2({
+					placeholder: "Select Pokemon",
+					allowClear: true,
+					width: "100%",
+				});
+
+				// Initialize Select2 for other dropdowns
+				$("#move-select").select2({
+					placeholder: "Select Move",
+					allowClear: true,
+					dropdownAutoWidth: true,
+					width: "style",
+				});
+
+				$("#abilityL1").select2({
+					placeholder: "Select Ability",
+					allowClear: true,
+					dropdownAutoWidth: true,
+					width: "style",
+				});
+
+				$("#abilityR1").select2({
+					placeholder: "Select Ability",
+					allowClear: true,
+					dropdownAutoWidth: true,
+					width: "style",
+				});
+
+				$("#itemL1").select2({
+					placeholder: "Select Item",
+					allowClear: true,
+					dropdownAutoWidth: true,
+					width: "style",
+				});
+
+				$("#itemR1").select2({
+					placeholder: "Select Item",
+					allowClear: true,
+					dropdownAutoWidth: true,
+					width: "style",
+				});
+
+				// Load Pokemon list from Python backend
+				$.get("/api/pokemon", function (pokemon) {
+					pokemon.forEach((p) => {
+						$("#attacker-input").append(
+							$("<option>", { value: p, text: p }),
+						);
+						$("#defender-input").append(
+							$("<option>", { value: p, text: p }),
+						);
+					});
+				});
+
+				// Load items
+				$.get("/api/items", function (items) {
+					items.forEach((i) => {
+						const text = i === "" ? "None" : i;
+						$("#itemL1").append($("<option>", { value: i, text: text }));
+						$("#itemR1").append($("<option>", { value: i, text: text }));
+					});
+					// Set default to None
+					$("#itemL1").val("").trigger("change");
+					$("#itemR1").val("").trigger("change");
+				});
+
+				// Load moves when attacker is selected
+				$("#attacker-input").on("change", function () {
+					const pokemon = $(this).val();
+					if (pokemon) {
+						$.get(
+							"/api/moves/" + encodeURIComponent(pokemon),
+							function (moves) {
+								$("#move-select")
+									.empty()
+									.append(
+										$("<option>", { value: "", text: "Select Move" }),
+									);
+								moves.forEach((m) => {
+									$("#move-select").append(
+										$("<option>", { value: m, text: m }),
+									);
+								});
+
+								// Load abilities
+								$.get(
+									"/api/abilities/" + encodeURIComponent(pokemon),
+									function (abilities) {
+										$("#abilityL1")
+											.empty()
+											.append(
+												$("<option>", { value: "", text: "None" }),
+											);
+										abilities.forEach((a) => {
+											$("#abilityL1").append(
+												$("<option>", { value: a, text: a }),
+											);
+										});
+										// Auto-select if only one ability, otherwise default to None
+										if (abilities.length === 1) {
+											$("#abilityL1")
+												.val(abilities[0])
+												.trigger("change");
+										} else {
+											$("#abilityL1").val("").trigger("change");
+										}
+									},
+								);
+							},
+						);
+					}
+				});
+
+				// Load defender abilities
+				$("#defender-input").on("change", function () {
+					const pokemon = $(this).val();
+					if (pokemon) {
+						$.get(
+							"/api/abilities/" + encodeURIComponent(pokemon),
+							function (abilities) {
+								$("#abilityR1")
+									.empty()
+									.append($("<option>", { value: "", text: "None" }));
+								abilities.forEach((a) => {
+									$("#abilityR1").append(
+										$("<option>", { value: a, text: a }),
+									);
+								});
+								// Auto-select if only one ability, otherwise default to None
+								if (abilities.length === 1) {
+									$("#abilityR1").val(abilities[0]).trigger("change");
+								} else {
+									$("#abilityR1").val("").trigger("change");
+								}
+							},
+						);
+
+						// Load defender stats
+						$.get(
+							"/api/stats/" + encodeURIComponent(pokemon),
+							function (stats) {
+								if (stats.hp) {
+									$("#defender-hp-base").val(stats.hp);
+									$("#defender-def-base").val(stats.def);
+									$("#defender-spd-base").val(stats.spd);
+								}
+							},
+						);
+					}
+				});
+
+				// Calculate button
+				$("#calculate-btn").on("click", function () {
+					// Collect field states as an array
+					const fieldStates = [];
+					$('input[name="fieldState"]:checked').each(function () {
+						fieldStates.push($(this).val());
+					});
+
+					// Collect spikes
+					const spikesR = $('input[name="spikesR"]:checked').val() || "0";
+
+					const data = {
+						attacker: $("#attacker-input").val(),
+						move: $("#move-select").val(),
+						defender: $("#defender-input").val(),
+						attacker_ability: $("#abilityL1").val(),
+						attacker_item: $("#itemL1").val(),
+						attacker_evs: $("#attacker-evs").val(),
+						attacker_boost: $("#attacker-boost").val(),
+						defender_ability: $("#abilityR1").val(),
+						defender_item: $("#itemR1").val(),
+						defender_hp: $("#defender-hp-sps").val(),
+						defender_def: $("#defender-def-sps").val(),
+						defender_spd: $("#defender-spd-sps").val(),
+						def_boost: $("#def-boost").val(),
+						spd_boost: $("#spd-boost").val(),
+						terrain: $('input[name="terrain"]:checked').val(),
+						weather: $('input[name="weather"]:checked').val(),
+						field: fieldStates,
+						spikesR: spikesR,
+						isStealthRock: $("#srR").is(":checked"),
+						isReflect: $("#reflectR").is(":checked"),
+						isLightScreen: $("#lightScreenR").is(":checked"),
+						isAuroraVeil: $("#auroraVeilR").is(":checked"),
+						isFriendGuard: $("#friendGuardR").is(":checked"),
+						isProtect: $("#protectR").is(":checked"),
+						isLeechSeed: $("#leechSeedR").is(":checked"),
+						isSaltCure: $("#saltCureR").is(":checked"),
+						isCharge: $("#chargeR").is(":checked"),
+						isHelpingHand: $("#helpingHandR").is(":checked"),
+						isTailwind: $("#tailwindR").is(":checked"),
+						isPowerTrick: $("#powerTrickR").is(":checked"),
+						isStatBoost: $("#StatBoostR").is(":checked"),
+						isSwitching: $("#switchingR").is(":checked"),
+						percent: parseFloat($("#survival-percent").val()),
+						showAll: $("#allResults").is(":checked"),
+					};
+
+					console.log("Sending data:", data);
+
+					$("#mainResult").text("Calculating...");
+
+					$.ajax({
+						url: "/api/survival",
+						method: "POST",
+						contentType: "application/json",
+						dataType: "json",
+						data: JSON.stringify(data),
+						success: function (result) {
+							const $table = $("#resultTable").empty();
+
+							if (!result.success) {
+								$("#mainResult").text(result.message);
+								return;
+							}
+
+							if (result.results.length === 0) {
+								$("#mainResult").text("No viable spread found");
+								return;
+							}
+
+							const results = result.results; // original order
+							const minPoints = Math.min(
+								...results.map((r) => r.points),
+							);
+							const esc = (s) => $("<div>").text(s).html();
+
+							// Which defensive stat was invested in: the spread key that isn't hp
+							const defKey = results[0].spread
+								? Object.keys(results[0].spread).find((k) => k !== "hp")
+								: null;
+							const defLabel = defKey
+								? defKey === "spd"
+									? "SpD"
+									: "Def"
+								: "Def";
+
+							$("#mainResult").text(minPoints + " points");
+
+							let html =
+								'<tr><th class="num">Points</th><th class="num">HP</th>' +
+								'<th class="num">' +
+								defLabel +
+								"</th><th>Damage</th><th>Result</th></tr>";
+
+							results.forEach((r) => {
+								const hpEv = r.spread ? r.spread.hp : "?";
+								const defEv =
+									r.spread && defKey ? r.spread[defKey] : "?";
+								const dmg = r.damage[0] + "-" + r.damage[1];
+								const pct =
+									"(" + r.percent[0] + " - " + r.percent[1] + "%)";
+								// The KO text is whatever follows " -- " in the description, e.g. "guaranteed 2HKO"
+								const ko = r.desc.split(" -- ")[1] || "";
+
+								html +=
+									"<tr" +
+									(r.points === minPoints ? ' class="min"' : "") +
+									">" +
+									'<td class="num">' +
+									r.points +
+									"</td>" +
+									'<td class="num">' +
+									hpEv +
+									"</td>" +
+									'<td class="num">' +
+									defEv +
+									"</td>" +
+									"<td>" +
+									dmg +
+									" " +
+									pct +
+									"</td>" +
+									"<td>" +
+									esc(ko) +
+									"</td>" +
+									"</tr>";
+							});
+
+							$table.html(html);
+						},
+					});
+				});
+			});
+		</script>
+	</body>
+</html>

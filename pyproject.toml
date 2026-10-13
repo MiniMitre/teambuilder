@@ -10,6 +10,7 @@ dependencies = [
     "duckdb>=1.5.5",
     "tqdm>=4.70.1",
     "typer>=0.27.2",
+    "flask>=3.0.0",
 ]
 
 [project.scripts]

@@ -124,6 +124,9 @@ def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INV
 
         if showAll:
             allPairs.append({HP: adjusted_HP, INVEST_IN: points})
+            if calculated_HP < 0:
+                # 0 HP is already enough, so any more defence investment is redundant
+                break
             continue
 
         if minPoints > total_points_used:
