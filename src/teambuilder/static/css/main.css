@@ -406,11 +406,9 @@ th {
 	font-weight: bold;
 	font-size: 1.5em;
 	margin: 0.5em 1em 0.5em 0;
-	position: relative;
-	top: -5px;
 }
 .main-title-text {
-	top: -10px;
+	/* Removed negative positioning */
 }
 .big-text {
 	text-align: left;
@@ -560,8 +558,12 @@ th {
 .notationSelection,
 .modeSelection {
 	display: inline-block;
-	position: relative;
-	top: -8px;
+}
+
+.header-section {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5em;
 }
 
 /* header */

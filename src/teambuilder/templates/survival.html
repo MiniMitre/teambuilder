@@ -37,16 +37,17 @@
 	<body class="dark-theme">
 		<!-- START WRAPPER -->
 		<div class="wrapper">
-			<span class="title-text main-title-text"
-				>Pok&eacute;mon Survival Calculator</span
-			>
-			<div aria-label="Settings" role="region">
-				<span
-					class="modeSelection"
-					aria-labelledby="selectResultsInstruction"
-					role="radiogroup"
-					title="Select results display."
+			<div class="header-section">
+				<span class="title-text main-title-text"
+					>Pok&eacute;mon Survival Calculator</span
 				>
+				<div aria-label="Settings" role="region">
+					<span
+						class="modeSelection"
+						aria-labelledby="selectResultsInstruction"
+						role="radiogroup"
+						title="Select results display."
+					>
 					<span class="visually-hidden" id="selectResultsInstruction"
 						>Select results display.</span
 					>
@@ -68,6 +69,7 @@
 						>All Results</label
 					>
 				</span>
+				</div>
 			</div>
 			<hr />
 
@@ -88,9 +90,21 @@
 					>
 						Calculate
 					</button>
+					<div style="margin-left: 20px; display: inline-block;">
+						<label>Survival Threshold (%)</label>
+						<input
+							type="number"
+							id="survival-percent"
+							class="calc-trigger"
+							value="100"
+							min="0"
+							max="100"
+							style="width: 60px"
+						/>
+					</div>
 				</div>
 				<div class="small-text">
-					<div id="resultDesc" style="margin-top: 8px"></div>
+					<div id="calcHeader" style="margin-top: 8px; font-weight: bold;"></div>
 					<table id="resultTable" class="result-table"></table>
 				</div>
 			</div>
@@ -146,9 +160,6 @@
 								value="32"
 								style="width: 60px"
 							/>
-						</div>
-						<div>
-							<label></label>
 							<select
 								id="attacker-boost"
 								class="calc-trigger"
@@ -1040,29 +1051,6 @@
 								</tr>
 							</tbody>
 						</table>
-
-						<div class="info-group" style="margin-top: 10px">
-							<div>
-								<label>Survival Threshold (%)</label>
-								<input
-									type="number"
-									id="survival-percent"
-									class="calc-trigger"
-									value="100"
-									min="0"
-									max="100"
-									style="width: 60px"
-								/>
-							</div>
-						</div>
-
-						<button
-							id="calculate-btn"
-							class="btn btn-wide"
-							style="width: 100%; margin-top: 10px"
-						>
-							Calculate Survival
-						</button>
 					</fieldset>
 				</div>
 			</div>
@@ -1102,65 +1090,24 @@
 							<thead>
 								<tr>
 									<th></th>
-									<th scope="col">Base</th>
-									<th scope="col">SPs</th>
-									<th></th>
-									<th scope="col"></th>
+									<th scope="col">Nature</th>
+									<th scope="col">Stage</th>
 								</tr>
 							</thead>
 							<tbody>
-								<tr class="hp">
-									<th scope="row">
-										<label>HP</label>
-									</th>
-									<td>
-										<input
-											class="base calc-trigger"
-											value="100"
-											inputmode="decimal"
-											id="defender-hp-base"
-										/>
-									</td>
-									<td>
-										<input
-											class="sps calc-trigger"
-											type="number"
-											min="0"
-											max="32"
-											value="0"
-											inputmode="decimal"
-											id="defender-hp-sps"
-										/>
-									</td>
-									<td><span class="total">341</span></td>
-									<td></td>
-								</tr>
 								<tr class="df">
 									<th scope="row">
 										<label>Def</label>
 									</th>
 									<td>
-										<input
-											class="base calc-trigger"
-											value="100"
-											inputmode="decimal"
-											id="defender-def-base"
-										/>
+										<select id="def-nature" class="calc-trigger" style="width: 80px">
+											<option value="1.1">+10%</option>
+											<option value="1.0" selected>0</option>
+											<option value="0.9">-10%</option>
+										</select>
 									</td>
 									<td>
-										<input
-											class="sps calc-trigger"
-											type="number"
-											min="0"
-											max="32"
-											value="0"
-											inputmode="decimal"
-											id="defender-def-sps"
-										/>
-									</td>
-									<td><span class="total">236</span></td>
-									<td>
-										<select class="boost calc-trigger" id="def-boost">
+										<select id="def-boost" class="boost calc-trigger" style="width: 60px">
 											<option value="6">+6</option>
 											<option value="5">+5</option>
 											<option value="4">+4</option>
@@ -1182,27 +1129,14 @@
 										<label>SpD</label>
 									</th>
 									<td>
-										<input
-											class="base calc-trigger"
-											value="100"
-											inputmode="decimal"
-											id="defender-spd-base"
-										/>
+										<select id="spd-nature" class="calc-trigger" style="width: 80px">
+											<option value="1.1">+10%</option>
+											<option value="1.0" selected>0</option>
+											<option value="0.9">-10%</option>
+										</select>
 									</td>
 									<td>
-										<input
-											class="sps calc-trigger"
-											type="number"
-											min="0"
-											max="32"
-											value="0"
-											inputmode="decimal"
-											id="defender-spd-sps"
-										/>
-									</td>
-									<td><span class="total">236</span></td>
-									<td>
-										<select class="boost calc-trigger" id="spd-boost">
+										<select id="spd-boost" class="boost calc-trigger" style="width: 60px">
 											<option value="6">+6</option>
 											<option value="5">+5</option>
 											<option value="4">+4</option>
@@ -1237,11 +1171,10 @@
 		<script>
 			$(document).ready(function () {
 				let lastResults = null; // results from the most recent calculation
-				let lastWasAll = false; // whether that calculation was run in All Results mode
+				let currentMoveCategory = null; // track current move category
 
 				function renderResults() {
 					const $table = $("#resultTable").empty();
-					const $desc = $("#resultDesc").empty();
 					if (!lastResults || lastResults.length === 0) return;
 
 					const esc = (s) => $("<div>").text(s).html();
@@ -1253,14 +1186,6 @@
 					const rows = showAll
 						? lastResults
 						: lastResults.filter((r) => r.points === minPoints);
-
-					// Full description from the first row, minus what the table already shows:
-					// the "3 HP / 6 SpD" investment and the ": 150-177 (84.2 - 99.4%) -- guaranteed 2HKO" tail
-					const cleanDesc = (d) =>
-						d
-							.replace(/\d+ HP \/ \d+ \w+ /, "")
-							.replace(/:\s*\d+-\d+ \(.*$/, "");
-					$desc.text(cleanDesc(rows[0].desc));
 
 					// Which defensive stat was invested in: the spread key that isn't hp
 					const defKey = rows[0].spread
@@ -1314,12 +1239,7 @@
 				});
 
 				$("#allResults").on("change", function () {
-					if (!lastResults) return;
-					if (lastWasAll) {
-						renderResults(); // already have every row
-					} else {
-						$("#calculate-btn").click(); // server only sent the minimums, so refetch
-					}
+					if (lastResults) renderResults();
 				});
 				// Initialize Select2 for Pokemon dropdowns
 				$("#attacker-input").select2({
@@ -1436,8 +1356,90 @@
 										}
 									},
 								);
+
+								// Auto-select mega stone if it's a mega Pokemon
+								if (pokemon.includes("-Mega")) {
+									// Mapping of Pokemon names to their mega stones
+									const megaStoneMap = {
+										"Dragonite-Mega": "Dragoninite",
+										"Gyarados-Mega": "Gyaradosite",
+										"Charizard-Mega X": "Charizardite X",
+										"Charizard-Mega Y": "Charizardite Y",
+										"Mewtwo-Mega X": "Mewtwonite X",
+										"Mewtwo-Mega Y": "Mewtwonite Y",
+										"Absol-Mega": "Absolite",
+										"Aerodactyl-Mega": "Aerodactylite",
+										"Aggron-Mega": "Aggronite",
+										"Alakazam-Mega": "Alakazite",
+										"Ampharos-Mega": "Ampharosite",
+										"Banette-Mega": "Banettite",
+										"Beedrill-Mega": "Beedrillite",
+										"Blastoise-Mega": "Blastoisinite",
+										"Blaziken-Mega": "Blazikenite",
+										"Camerupt-Mega": "Cameruptite",
+										"Chandelure-Mega": "Chandelurite",
+										"Charizard-Mega": "Charizardite",
+										"Diancie-Mega": "Diancite",
+										"Gallade-Mega": "Galladite",
+										"Garchomp-Mega": "Garchompite",
+										"Gardevoir-Mega": "Gardevoirite",
+										"Gengar-Mega": "Gengarite",
+										"Glalie-Mega": "Glalitite",
+										"Greninja-Mega": "Greninjite",
+										"Gyarados-Mega": "Gyaradosite",
+										"Heracross-Mega": "Heracronite",
+										"Houndoom-Mega": "Houndoominite",
+										"Kangaskhan-Mega": "Kangaskhanite",
+										"Lopunny-Mega": "Lopunnite",
+										"Lucario-Mega": "Lucarionite",
+										"Manectric-Mega": "Manectrite",
+										"Mawile-Mega": "Mawilite",
+										"Medicham-Mega": "Medichamite",
+										"Metagross-Mega": "Metagrossite",
+										"Pidgeot-Mega": "Pidgeotite",
+										"Pinsir-Mega": "Pinsirite",
+										"Sableye-Mega": "Sablenite",
+										"Salamence-Mega": "Salamencite",
+									"Sceptile-Mega": "Sceptilite",
+										"Scizor-Mega": "Scizorite",
+										"Sharpedo-Mega": "Sharpedonite",
+										"Slowbro-Mega": "Slowbronite",
+										"Steelix-Mega": "Steelixite",
+										"Tyranitar-Mega": "Tyranitarite",
+										"Venusaur-Mega": "Venusaurite"
+									};
+
+									const megaStone = megaStoneMap[pokemon];
+									if (megaStone) {
+										// Check if the mega stone exists in the item dropdown
+										const $itemOption = $("#itemL1").find(`option[value="${megaStone}"]`);
+										if ($itemOption.length > 0) {
+											$("#itemL1").val(megaStone).trigger("change");
+										}
+									}
+								}
 							},
 						);
+					}
+				});
+
+				// Get move category when move is selected
+				$("#move-select").on("change", function () {
+					const move = $(this).val();
+					if (move) {
+						$.get(
+							"/api/move-category/" + encodeURIComponent(move),
+							function (data) {
+								currentMoveCategory = data.category;
+								updateCalcHeader();
+							}
+						).fail(function () {
+							currentMoveCategory = null;
+							updateCalcHeader();
+						});
+					} else {
+						currentMoveCategory = null;
+						updateCalcHeader();
 					}
 				});
 
@@ -1465,19 +1467,114 @@
 							},
 						);
 
-						// Load defender stats
-						$.get(
-							"/api/stats/" + encodeURIComponent(pokemon),
-							function (stats) {
-								if (stats.hp) {
-									$("#defender-hp-base").val(stats.hp);
-									$("#defender-def-base").val(stats.def);
-									$("#defender-spd-base").val(stats.spd);
+						// Auto-select mega stone if it's a mega Pokemon
+						if (pokemon.includes("-Mega")) {
+							// Mapping of Pokemon names to their mega stones
+							const megaStoneMap = {
+								"Dragonite-Mega": "Dragoninite",
+								"Gyarados-Mega": "Gyaradosite",
+								"Charizard-Mega X": "Charizardite X",
+								"Charizard-Mega Y": "Charizardite Y",
+								"Mewtwo-Mega X": "Mewtwonite X",
+								"Mewtwo-Mega Y": "Mewtwonite Y",
+								"Absol-Mega": "Absolite",
+								"Aerodactyl-Mega": "Aerodactylite",
+								"Aggron-Mega": "Aggronite",
+								"Alakazam-Mega": "Alakazite",
+								"Ampharos-Mega": "Ampharosite",
+								"Banette-Mega": "Banettite",
+								"Beedrill-Mega": "Beedrillite",
+								"Blastoise-Mega": "Blastoisinite",
+								"Blaziken-Mega": "Blazikenite",
+								"Camerupt-Mega": "Cameruptite",
+								"Chandelure-Mega": "Chandelurite",
+								"Charizard-Mega": "Charizardite",
+								"Diancie-Mega": "Diancite",
+								"Gallade-Mega": "Galladite",
+								"Garchomp-Mega": "Garchompite",
+								"Gardevoir-Mega": "Gardevoirite",
+								"Gengar-Mega": "Gengarite",
+								"Glalie-Mega": "Glalitite",
+								"Greninja-Mega": "Greninjite",
+								"Gyarados-Mega": "Gyaradosite",
+								"Heracross-Mega": "Heracronite",
+								"Houndoom-Mega": "Houndoominite",
+								"Kangaskhan-Mega": "Kangaskhanite",
+								"Lopunny-Mega": "Lopunnite",
+								"Lucario-Mega": "Lucarionite",
+								"Manectric-Mega": "Manectrite",
+								"Mawile-Mega": "Mawilite",
+								"Medicham-Mega": "Medichamite",
+								"Metagross-Mega": "Metagrossite",
+								"Pidgeot-Mega": "Pidgeotite",
+								"Pinsir-Mega": "Pinsirite",
+								"Sableye-Mega": "Sablenite",
+								"Salamence-Mega": "Salamencite",
+							"Sceptile-Mega": "Sceptilite",
+								"Scizor-Mega": "Scizorite",
+								"Sharpedo-Mega": "Sharpedonite",
+								"Slowbro-Mega": "Slowbronite",
+								"Steelix-Mega": "Steelixite",
+								"Tyranitar-Mega": "Tyranitarite",
+								"Venusaur-Mega": "Venusaurite"
+							};
+
+							const megaStone = megaStoneMap[pokemon];
+							if (megaStone) {
+								// Check if the mega stone exists in the item dropdown
+								const $itemOption = $("#itemR1").find(`option[value="${megaStone}"]`);
+								if ($itemOption.length > 0) {
+									$("#itemR1").val(megaStone).trigger("change");
 								}
-							},
-						);
+							}
+						}
 					}
 				});
+
+				// Function to update the calculation header
+				function updateCalcHeader() {
+					const attacker = $("#attacker-input").val() || "";
+					const move = $("#move-select").val() || "";
+					const attackerBoost = $("#attacker-boost").val();
+					const attackerEvs = $("#attacker-evs").val();
+					const attackerItem = $("#itemL1").val() || "";
+					const defender = $("#defender-input").val() || "";
+
+					// If move is empty, show blank header
+					if (!move) {
+						$("#calcHeader").text("");
+						return;
+					}
+
+					let boostText = "";
+					if (attackerBoost != 0) {
+						boostText = (attackerBoost > 0 ? "+" : "") + attackerBoost + " ";
+					}
+
+					// Use ATK or SPA based on move category
+					let evsText = attackerEvs;
+					if (currentMoveCategory) {
+						const statLabel = currentMoveCategory === "Physical" ? "ATK" : "SPA";
+						evsText = attackerEvs + statLabel;
+					}
+
+					// Only include item if it's not empty
+					const itemText = attackerItem ? attackerItem + " " : "";
+
+					const headerText = `${boostText}${evsText} ${attacker} ${itemText}${move} vs ${defender}`;
+					$("#calcHeader").text(headerText);
+				}
+
+				// Bind inputs to update calculation header
+				$("#attacker-input").on("change", updateCalcHeader);
+				$("#move-select").on("change", updateCalcHeader);
+				$("#attacker-boost").on("change", updateCalcHeader);
+				$("#attacker-evs").on("input", updateCalcHeader);
+				$("#itemL1").on("change", updateCalcHeader);
+				$("#defender-input").on("change", updateCalcHeader);
+
+				// Initialize header
+				updateCalcHeader();
 
 				// Calculate button
 				$("#calculate-btn").on("click", function () {
@@ -1500,9 +1597,8 @@
 						attacker_boost: $("#attacker-boost").val(),
 						defender_ability: $("#abilityR1").val(),
 						defender_item: $("#itemR1").val(),
-						defender_hp: $("#defender-hp-sps").val(),
-						defender_def: $("#defender-def-sps").val(),
-						defender_spd: $("#defender-spd-sps").val(),
+						def_nature: $("#def-nature").val(),
+						spd_nature: $("#spd-nature").val(),
 						def_boost: $("#def-boost").val(),
 						spd_boost: $("#spd-boost").val(),
 						terrain: $('input[name="terrain"]:checked').val(),
@@ -1524,7 +1620,7 @@
 						isStatBoost: $("#StatBoostR").is(":checked"),
 						isSwitching: $("#switchingR").is(":checked"),
 						percent: parseFloat($("#survival-percent").val()),
-						showAll: $("#allResults").is(":checked"),
+						showAll: true, // Always calculate all results
 					};
 
 					console.log("Sending data:", data);
@@ -1550,65 +1646,19 @@
 								return;
 							}
 
-							const results = result.results; // original order
-							const minPoints = Math.min(
-								...results.map((r) => r.points),
-							);
-							const esc = (s) => $("<div>").text(s).html();
+							lastResults = result.results;
 
-							// Which defensive stat was invested in: the spread key that isn't hp
-							const defKey = results[0].spread
-								? Object.keys(results[0].spread).find((k) => k !== "hp")
-								: null;
-							const defLabel = defKey
-								? defKey === "spd"
-									? "SpD"
-									: "Def"
-								: "Def";
+							// Update header with the first result's description
+							if (result.results.length > 0) {
+								const firstDesc = result.results[0].desc;
+								// Remove the investment part and damage/percent part
+								const cleanDesc = firstDesc
+									.replace(/\d+ HP \/ \d+ \w+ /, "")
+									.replace(/:\s*\d+-\d+ \(.*$/, "");
+								$("#calcHeader").text(cleanDesc);
+							}
 
-							$("#mainResult").text(minPoints + " points");
-
-							let html =
-								'<tr><th class="num">Points</th><th class="num">HP</th>' +
-								'<th class="num">' +
-								defLabel +
-								"</th><th>Damage</th><th>Result</th></tr>";
-
-							results.forEach((r) => {
-								const hpEv = r.spread ? r.spread.hp : "?";
-								const defEv =
-									r.spread && defKey ? r.spread[defKey] : "?";
-								const dmg = r.damage[0] + "-" + r.damage[1];
-								const pct =
-									"(" + r.percent[0] + " - " + r.percent[1] + "%)";
-								// The KO text is whatever follows " -- " in the description, e.g. "guaranteed 2HKO"
-								const ko = r.desc.split(" -- ")[1] || "";
-
-								html +=
-									"<tr" +
-									(r.points === minPoints ? ' class="min"' : "") +
-									">" +
-									'<td class="num">' +
-									r.points +
-									"</td>" +
-									'<td class="num">' +
-									hpEv +
-									"</td>" +
-									'<td class="num">' +
-									defEv +
-									"</td>" +
-									"<td>" +
-									dmg +
-									" " +
-									pct +
-									"</td>" +
-									"<td>" +
-									esc(ko) +
-									"</td>" +
-									"</tr>";
-							});
-
-							$table.html(html);
+							renderResults();
 						},
 					});
 				});

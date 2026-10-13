@@ -104,6 +104,18 @@ def get_pokemon_stats(pokemon):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/move-category/<move>')
+def get_move_category(move):
+    """Get the category (Physical/Special/Status) of a move."""
+    from teambuilder.calc import move_category
+    try:
+        category = move_category(move)
+        if category:
+            return jsonify({'category': category})
+        return jsonify({'category': None}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/survival', methods=['POST'])
 def calculate_survival():
     """API endpoint for survival calculation using Python backend."""
@@ -128,20 +140,9 @@ def calculate_survival():
     if data.get('attacker_ability'):
         attacker_opts['ability'] = data['attacker_ability']
     
-    defender_opts = {}
-    if data.get('defender_item'):
-        defender_opts['item'] = data['defender_item']
-    if data.get('defender_ability'):
-        defender_opts['ability'] = data['defender_ability']
-    
     defender_evs = {}
-    if data.get('defender_hp'):
-        defender_evs['hp'] = int(data['defender_hp'])
-    if data.get('defender_def'):
-        defender_evs['def'] = int(data['defender_def'])
-    if data.get('defender_spd'):
-        defender_evs['spd'] = int(data['defender_spd'])
-    
+    # No defender EVs input - the calculator will determine optimal spread
+
     # Build attacker opts with stat boosts
     attacker_opts = {}
     if data.get('attacker_item'):
@@ -153,13 +154,45 @@ def calculate_survival():
         # Apply boost to both atk and spa - the move's category will determine which matters
         attacker_opts['boosts']['atk'] = int(data['attacker_boost'])
         attacker_opts['boosts']['spa'] = int(data['attacker_boost'])
-    
-    # Build defender opts with stat boosts
+
+    # Build defender opts with nature boosts
     defender_opts = {}
     if data.get('defender_item'):
         defender_opts['item'] = data['defender_item']
     if data.get('defender_ability'):
         defender_opts['ability'] = data['defender_ability']
+
+    # Handle nature as nature multiplier (1.1, 1.0, or 0.9)
+    # The calculator expects nature as a string like 'Adamant', 'Bold', etc.
+    # We'll map the multipliers to appropriate natures
+    def_nature = data.get('def_nature', '1.0')
+    spd_nature = data.get('spd_nature', '1.0')
+
+    # Map nature multipliers to actual Pokemon natures
+    # +10% Def: Bold (+Def, -Atk)
+    # +10% SpD: Calm (+SpD, -Atk)
+    # -10% Def: Hasty (-Def, +Spe)
+    # -10% SpD: Naive (-SpD, +Spe)
+    # Neutral: Serious, Docile, Bashful, Quirky, Hardy, etc.
+
+    # Determine which stat's nature to use based on which is non-neutral
+    # If both are non-neutral, we need to prioritize one
+    nature_map = {
+        '1.1': {'def': 'Bold', 'spd': 'Calm'},
+        '1.0': {'def': 'Serious', 'spd': 'Serious'},
+        '0.9': {'def': 'Hasty', 'spd': 'Naive'}
+    }
+
+    # Use the first non-neutral nature, default to Serious
+    selected_nature = 'Serious'
+    if def_nature != '1.0':
+        selected_nature = nature_map[def_nature]['def']
+    elif spd_nature != '1.0':
+        selected_nature = nature_map[spd_nature]['spd']
+
+    defender_opts['nature'] = selected_nature
+
+    # Handle stat boosts (stage)
     if data.get('def_boost'):
         defender_opts['boosts'] = defender_opts.get('boosts', {})
         defender_opts['boosts']['def'] = int(data['def_boost'])
