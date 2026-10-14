@@ -35,14 +35,14 @@ $(document).ready(function() {
     $('#move').select2({
         placeholder: 'Any (best move)',
         allowClear: true,
-        width: '100%'
+        width: '14em'
     });
 
     // Initialize Select2 for type filter (options already in HTML)
     $('#filter_type1').select2({
         placeholder: 'Any',
         allowClear: true,
-        width: '100%'
+        width: '14em'
     });
 
     // Load Pokemon list
@@ -72,7 +72,7 @@ $(document).ready(function() {
             $this.select2({
                 placeholder: 'Select Item',
                 allowClear: true,
-                width: '100%'
+                width: '14em'
             });
         });
     });
@@ -91,7 +91,7 @@ $(document).ready(function() {
                     $('#defender_ability').select2({
                         placeholder: 'Select Ability',
                         allowClear: true,
-                        width: '100%'
+                        width: '14em'
                     });
                 }
                 // Auto-select if only one ability
@@ -107,6 +107,19 @@ $(document).ready(function() {
     // Search button click handler
     $('#searchBtn').click(function() {
         performBulkKO();
+    });
+
+    // Cancel button click handler
+    $('#cancelBtn').click(function() {
+        if (window.eventSource) {
+            window.eventSource.close();
+            window.eventSource = null;
+        }
+        $('#searchBtn').prop('disabled', false);
+        $('#cancelBtn').hide();
+        $('#progressBar').hide();
+        $('#progressText').hide();
+        $('#resultsBody').html('<tr><td colspan="5" style="text-align: center;">Search cancelled</td></tr>');
     });
 
     function performBulkKO() {
@@ -132,13 +145,128 @@ $(document).ready(function() {
             filter_min_bst: $('#filter_min_bst').val() ? parseInt($('#filter_min_bst').val()) : null,
             filter_min_spe: $('#filter_min_spe').val() ? parseInt($('#filter_min_spe').val()) : null,
             // Performance option
-            only_super_effective: $('#only_super_effective').is(':checked')
+            only_super_effective: $('#only_super_effective').is(':checked'),
+            // Field effects
+            terrain: $('input[name="terrain"]:checked').val() || null,
+            weather: $('input[name="weather"]:checked').val() || null,
+            field: [],
+            format: $('input[name="format"]:checked').val() || 'doubles'
         };
+
+        // Collect field states
+        if ($('#gravity').is(':checked')) {
+            data.field.push('Gravity');
+        }
+        if ($('#magic-room').is(':checked')) {
+            data.field.push('MagicRoom');
+        }
+        if ($('#wonder-room').is(':checked')) {
+            data.field.push('WonderRoom');
+        }
+
+        // Attacker side conditions
+        const attacker_side = {};
+        if ($('#srL').is(':checked')) {
+            attacker_side['isSR'] = true;
+        }
+        if ($('#spikesL').filter(':checked').val()) {
+            attacker_side['spikes'] = parseInt($('input[name="spikesL"]:checked').val());
+        }
+        if ($('#reflectL').is(':checked')) {
+            attacker_side['isReflect'] = true;
+        }
+        if ($('#lightScreenL').is(':checked')) {
+            attacker_side['isLightScreen'] = true;
+        }
+        if ($('#friendGuardL').is(':checked')) {
+            attacker_side['isFriendGuard'] = true;
+        }
+        if ($('#auroraVeilL').is(':checked')) {
+            attacker_side['isAuroraVeil'] = true;
+        }
+        if ($('#protectL').is(':checked')) {
+            attacker_side['isProtected'] = true;
+        }
+        if ($('#leechSeedL').is(':checked')) {
+            attacker_side['isSeeded'] = true;
+        }
+        if ($('#saltCureL').is(':checked')) {
+            attacker_side['isSaltCure'] = true;
+        }
+        if ($('#chargeL').is(':checked')) {
+            attacker_side['isCharged'] = true;
+        }
+        if ($('#helpingHandL').is(':checked')) {
+            attacker_side['isHelpingHand'] = true;
+        }
+        if ($('#tailwindL').is(':checked')) {
+            attacker_side['isTailwind'] = true;
+        }
+        if ($('#powerTrickL').is(':checked')) {
+            attacker_side['isPowerTrick'] = true;
+        }
+        if ($('#StatBoostL').is(':checked')) {
+            attacker_side['isForesight'] = true;
+        }
+        if ($('#switchingL').is(':checked')) {
+            attacker_side['isSwitching'] = true;
+        }
+        data.attacker_side = attacker_side;
+
+        // Defender side conditions
+        const defender_side = {};
+        if ($('#srR').is(':checked')) {
+            defender_side['isSR'] = true;
+        }
+        if ($('#spikesR').filter(':checked').val()) {
+            defender_side['spikes'] = parseInt($('input[name="spikesR"]:checked').val());
+        }
+        if ($('#reflectR').is(':checked')) {
+            defender_side['isReflect'] = true;
+        }
+        if ($('#lightScreenR').is(':checked')) {
+            defender_side['isLightScreen'] = true;
+        }
+        if ($('#friendGuardR').is(':checked')) {
+            defender_side['isFriendGuard'] = true;
+        }
+        if ($('#auroraVeilR').is(':checked')) {
+            defender_side['isAuroraVeil'] = true;
+        }
+        if ($('#protectR').is(':checked')) {
+            defender_side['isProtected'] = true;
+        }
+        if ($('#leechSeedR').is(':checked')) {
+            defender_side['isSeeded'] = true;
+        }
+        if ($('#saltCureR').is(':checked')) {
+            defender_side['isSaltCure'] = true;
+        }
+        if ($('#chargeR').is(':checked')) {
+            defender_side['isCharged'] = true;
+        }
+        if ($('#helpingHandR').is(':checked')) {
+            defender_side['isHelpingHand'] = true;
+        }
+        if ($('#tailwindR').is(':checked')) {
+            defender_side['isTailwind'] = true;
+        }
+        if ($('#powerTrickR').is(':checked')) {
+            defender_side['isPowerTrick'] = true;
+        }
+        if ($('#StatBoostR').is(':checked')) {
+            defender_side['isForesight'] = true;
+        }
+        if ($('#switchingR').is(':checked')) {
+            defender_side['isSwitching'] = true;
+        }
+        data.defender_side = defender_side;
 
         console.log('Sending data:', data);
 
         // Show loading state
         $('#searchBtn').prop('disabled', true);
+        $('#cancelBtn').show();
         $('#progressBar').show();
         $('#progressFill').css('width', '0%');
         $('#progressText').show().text('Initializing...');
@@ -147,9 +275,9 @@ $(document).ready(function() {
 
         // Use Server-Sent Events for real-time progress
         const queryString = $.param(data);
-        const eventSource = new EventSource('/api/bulk-ko-stream?' + queryString);
+        window.eventSource = new EventSource('/api/bulk-ko-stream?' + queryString);
 
-        eventSource.onmessage = function(event) {
+        window.eventSource.onmessage = function(event) {
             const msg = JSON.parse(event.data);
 
             if (msg.type === 'start') {
@@ -165,9 +293,11 @@ $(document).ready(function() {
                 // Display all results at once (for specific move mode)
                 displayResults(msg.results);
             } else if (msg.type === 'complete') {
-                eventSource.close();
+                window.eventSource.close();
+                window.eventSource = null;
                 $('#progressFill').css('width', '100%');
                 $('#searchBtn').prop('disabled', false);
+                $('#cancelBtn').hide();
 
                 if (!msg.success) {
                     $('#resultsBody').html('<tr><td colspan="5" style="text-align: center; color: red;">Error: ' + msg.error + '</td></tr>');
@@ -184,9 +314,11 @@ $(document).ready(function() {
             }
         };
 
-        eventSource.onerror = function() {
-            eventSource.close();
+        window.eventSource.onerror = function() {
+            window.eventSource.close();
+            window.eventSource = null;
             $('#searchBtn').prop('disabled', false);
+            $('#cancelBtn').hide();
             $('#progressBar').hide();
             $('#progressText').hide();
             $('#resultsBody').html('<tr><td colspan="5" style="text-align: center; color: red;">Connection error</td></tr>');
