@@ -417,10 +417,14 @@ th {
 	margin: 0.5em 0;
 	position: relative;
 }
-.big-text #mainResult:hover {
-	/* indicates the presence of click-to-copy function */
-	cursor: pointer;
-	opacity: 0.7;
+
+.input-error {
+	border: 2px solid #ff4444 !important;
+	box-shadow: 0 0 5px rgba(255, 68, 68, 0.5) !important;
+}
+
+.input-error .selection {
+	border: 2px solid #ff4444 !important;
 }
 #tooltipText {
 	position: absolute;
@@ -606,6 +610,24 @@ th {
 .result-table td.num,
 .result-table th.num {
 	text-align: right;
+}
+/* Highlight the important columns (Points, HP, Def/SpD) */
+.result-table td:nth-child(1),
+.result-table td:nth-child(2),
+.result-table td:nth-child(3),
+.result-table th:nth-child(1),
+.result-table th:nth-child(2),
+.result-table th:nth-child(3) {
+	font-weight: bold;
+	color: #fff;
+}
+/* De-emphasize the verification columns (Damage, Result) */
+.result-table td:nth-child(4),
+.result-table td:nth-child(5),
+.result-table th:nth-child(4),
+.result-table th:nth-child(5) {
+	opacity: 0.6;
+	font-size: 0.9em;
 }
 /* Minimum rows: bold plus a faint highlight that works in light and dark themes */
 .result-table tr.min td {
