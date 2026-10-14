@@ -110,6 +110,8 @@ def build_request(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
     gen: int = DEFAULT_GEN,
     request_id=None,
 ) -> dict:
@@ -132,6 +134,13 @@ def build_request(
         # Champions is played in doubles.
         "field": {"gameType": "Doubles", **(field_opts or {})},
     }
+
+    # Add side conditions if provided
+    if defender_side:
+        request["defenderSide"] = defender_side
+    if attacker_side:
+        request["attackerSide"] = attacker_side
+
     # Only worth sending when there is one: calc.js echoes it back, which is
     # how a response is matched to its request in a batch.
     if request_id is not None:

@@ -27,83 +27,34 @@
 			src="/static/js/theme-init.js"
 		></script>
 		<style>
-			.bulk-container {
-				display: flex;
-				gap: 20px;
-				padding: 20px;
-			}
-			.bulk-sidebar {
-				width: 350px;
-				flex-shrink: 0;
-			}
-			.bulk-results {
-				flex-grow: 1;
-			}
-			.filter-section {
-				margin-bottom: 20px;
-				padding: 15px;
-				background: #2a2a2a;
-				border-radius: 5px;
-			}
-			.filter-section h3 {
-				margin-top: 0;
-				margin-bottom: 10px;
-				font-size: 16px;
-			}
-			.filter-group {
-				margin-bottom: 10px;
-			}
-			.filter-group label {
-				display: block;
-				margin-bottom: 5px;
-				font-size: 14px;
-			}
-			.filter-group input,
-			.filter-group select {
-				width: 100%;
-				padding: 5px;
-				box-sizing: border-box;
-			}
-			.search-btn {
-				width: 100%;
-				padding: 10px;
-				background: #4CAF50;
-				color: white;
-				border: none;
-				border-radius: 5px;
-				cursor: pointer;
-				font-size: 16px;
-			}
-			.search-btn:hover {
-				background: #45a049;
-			}
-			.search-btn:disabled {
-				background: #666;
-				cursor: not-allowed;
+			.results-section {
+				margin: 0.5em 0 1em;
 			}
 			.results-table {
-				width: 100%;
 				border-collapse: collapse;
-				background: #2a2a2a;
-				border-radius: 5px;
-				overflow: hidden;
+				margin-top: 8px;
 			}
 			.results-table th,
 			.results-table td {
-				padding: 10px;
+				padding: 2px 14px 2px 0;
 				text-align: left;
-				border-bottom: 1px solid #444;
+				font-variant-numeric: tabular-nums;
+				white-space: nowrap;
 			}
 			.results-table th {
-				background: #333;
-				font-weight: bold;
+				opacity: 0.7;
+				font-weight: normal;
+			}
+			.results-table td.num,
+			.results-table th.num {
+				text-align: right;
 			}
 			.results-table tr:hover {
-				background: #3a3a3a;
+				background: rgba(128, 128, 128, 0.18);
 			}
 			.results-count {
 				margin-bottom: 10px;
-				font-size: 14px;
+				font-size: 0.8em;
 			}
 			.progress-bar {
 				width: 100%;
@@ -125,6 +76,55 @@
 				font-size: 12px;
 				margin-bottom: 10px;
 				display: none;
+			}
+			.search-btn {
+				width: 100%;
+				padding: 10px;
+				background: #4CAF50;
+				color: white;
+				border: none;
+				border-radius: 5px;
+				cursor: pointer;
+				font-size: 16px;
+				margin-top: 1em;
+			}
+			.search-btn:hover {
+				background: #45a049;
+			}
+			.search-btn:disabled {
+				background: #666;
+				cursor: not-allowed;
+			}
+			.search-btn.cancel {
+				background: #f44336;
+			}
+			.search-btn.cancel:hover {
+				background: #d32f2f;
+			}
+			.filter-group {
+				margin: 1em 0;
+			}
+			.filter-group label {
+				display: inline-block;
+				width: 6em;
+			}
+			.filter-group input,
+			.filter-group select {
+				width: 14em;
+			}
+			.filter-group input[type="checkbox"] {
+				width: auto;
+			}
+			.field-buttons {
+				display: flex;
+				gap: 5px;
+				flex-wrap: wrap;
+				justify-content: center;
+				margin: 5px 0;
+			}
+			.field-buttons label {
+				display: inline-block;
+				margin: 0;
 			}
 		</style>
 	</head>
@@ -165,43 +165,36 @@
 			</div>
 			<hr />
 
-			<div class="bulk-container">
-				<div class="bulk-sidebar">
-					<div class="filter-section">
-						<h3>Defender</h3>
-						<div class="filter-group">
-							<label for="defender">Pokemon</label>
-							<select id="defender"></select>
-						</div>
-						<div class="filter-group">
-							<label for="defender_item">Item</label>
-							<select id="defender_item" class="item"></select>
-						</div>
-						<div class="filter-group">
-							<label for="defender_ability">Ability</label>
-							<select id="defender_ability" class="ability"></select>
-						</div>
-					</div>
+			<div class="results-section">
+				<div class="progress-bar" id="progressBar">
+					<div class="progress-fill" id="progressFill"></div>
+				</div>
+				<div class="progress-text" id="progressText">Processing...</div>
+				<div class="results-count" id="resultsCount"></div>
+				<table class="results-table">
+					<thead>
+						<tr>
+							<th>Pokemon</th>
+							<th>Points Needed</th>
+							<th>Best Move</th>
+							<th>Ability Required</th>
+							<th>Description</th>
+						</tr>
+					</thead>
+					<tbody id="resultsBody">
+						<tr>
+							<td colspan="5" style="text-align: center;">Select a defender and click Find Attackers</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
 
-					<div class="filter-section">
-						<h3>Defender EVs</h3>
-						<div class="filter-group">
-							<label for="defender_hp">HP</label>
-							<input type="number" id="defender_hp" placeholder="0" min="0" max="32" />
-						</div>
-						<div class="filter-group">
-							<label for="defender_def">Defense</label>
-							<input type="number" id="defender_def" placeholder="0" min="0" max="32" />
-						</div>
-						<div class="filter-group">
-							<label for="defender_spd">Sp. Defense</label>
-							<input type="number" id="defender_spd" placeholder="0" min="0" max="32" />
-						</div>
-					</div>
+			<div aria-label="Attacker Filters" class="panel" role="region">
+				<fieldset class="poke-info" id="p1">
+					<legend align="center">Attacker Filters</legend>
 
-					<div class="filter-section">
-						<h3>Attacker Filters (Optional)</h3>
-						<div class="filter-group">
+					<div class="info-group">
+						<div>
 							<label for="filter_type1">Type 1</label>
 							<select id="filter_type1">
 								<option value="">Any</option>
@@ -209,7 +202,7 @@
 								<option value="Fire">Fire</option>
 								<option value="Water">Water</option>
 								<option value="Electric">Electric</option>
-								<option value="Grass">Grass</option>
+								<option value="Grass">Grassy</option>
 								<option value="Ice">Ice</option>
 								<option value="Fighting">Fighting</option>
 								<option value="Poison">Poison</option>
@@ -225,64 +218,1001 @@
 								<option value="Fairy">Fairy</option>
 							</select>
 						</div>
-						<div class="filter-group">
-							<label for="filter_min_bst">Min BST</label>
-							<input type="number" id="filter_min_bst" placeholder="e.g., 500" min="0" max="720" />
-						</div>
-						<div class="filter-group">
-							<label for="filter_min_spe">Min Speed</label>
-							<input type="number" id="filter_min_spe" placeholder="e.g., 100" min="0" max="255" />
-						</div>
 					</div>
 
-					<div class="filter-section">
-						<h3>Attack Options</h3>
-						<div class="filter-group">
-							<label for="move">Target Move (optional, leave empty for best move)</label>
-							<select id="move"></select>
-						</div>
-						<div class="filter-group">
-							<label for="attacker_item">Attacker Item (optional)</label>
-							<select id="attacker_item" class="item"></select>
-						</div>
-						<div class="filter-group">
-							<label for="ko_percent">KO Threshold (%)</label>
-							<input type="number" id="ko_percent" value="100" min="0" max="100" />
-						</div>
-						<div class="filter-group">
-							<label>
-								<input type="checkbox" id="only_super_effective" checked />
-								Only check super effective moves (much faster)
-							</label>
-						</div>
+					<div class="info-group">
+						<label for="filter_min_bst">Min BST</label>
+						<input type="number" id="filter_min_bst" placeholder="500" min="0" max="720" />
 					</div>
 
-					<button class="search-btn" id="searchBtn">Find Attackers</button>
+					<div class="info-group">
+						<label for="filter_min_spe">Min Speed</label>
+						<input type="number" id="filter_min_spe" placeholder="100" min="0" max="255" />
+					</div>
+
+					<div class="info-group">
+						<label for="move">Target Move</label>
+						<select id="move"></select>
+					</div>
+
+					<div class="info-group">
+						<label for="attacker_item">Attacker Item</label>
+						<select id="attacker_item" class="item"></select>
+					</div>
+
+					<div class="info-group">
+						<label for="ko_percent">KO Threshold (%)</label>
+						<input type="number" id="ko_percent" value="100" min="0" max="100" />
+					</div>
+
+					<div class="info-group">
+						<label>
+							<input type="checkbox" id="only_super_effective" checked />
+							Only check super effective moves
+						</label>
+					</div>
+
+					<div class="info-group">
+						<button class="search-btn" id="searchBtn">Find Attackers</button>
+						<button class="search-btn cancel" id="cancelBtn" style="display: none;">Cancel</button>
+					</div>
+				</fieldset>
+			</div>
+
+			<div class="panel">
+				<div aria-label="Field information" role="region">
+					<fieldset class="field-info">
+						<legend align="center">Field</legend>
+
+						<div
+							aria-labelledby="selectBattleFormatInstruction"
+							role="radiogroup"
+							style="width: 10.6em; margin: 0 auto 5px"
+							title="Select the battle format."
+						>
+							<span
+								class="visually-hidden"
+								id="selectBattleFormatInstruction"
+								>Select the battle format.</span
+							>
+							<input
+								class="visually-hidden"
+								type="radio"
+								name="format"
+								value="singles"
+								id="singles-format"
+							/>
+							<label class="btn btn-left" for="singles-format"
+								>Singles</label
+							>
+							<input
+								class="visually-hidden"
+								type="radio"
+								name="format"
+								value="doubles"
+								id="doubles-format"
+								checked="checked"
+							/>
+							<label class="btn btn-right" for="doubles-format"
+								>Doubles</label
+							>
+						</div>
+
+						<div
+							aria-labelledby="selectTerrainInstruction"
+							role="radiogroup"
+							title="Select the current terrain."
+						>
+							<span class="visually-hidden" id="selectTerrainInstruction"
+								>Select the current terrain.</span
+							>
+							<input
+								class="visually-hidden terrain-trigger"
+								type="radio"
+								name="terrain"
+								value=""
+								id="no-terrain"
+								checked="checked"
+							/><label class="btn btn-left" for="no-terrain">None</label>
+							<input
+								class="visually-hidden terrain-trigger"
+								type="radio"
+								name="terrain"
+								value="Electric"
+								id="electric"
+							/><label class="btn btn-mid" for="electric"
+								>Electric</label
+							>
+							<input
+								class="visually-hidden terrain-trigger"
+								type="radio"
+								name="terrain"
+								value="Grassy"
+								id="grassy"
+							/><label class="btn btn-mid" for="grassy">Grassy</label>
+							<input
+								class="visually-hidden terrain-trigger"
+								type="radio"
+								name="terrain"
+								value="Misty"
+								id="misty"
+							/><label class="btn btn-mid" for="misty">Misty</label>
+							<input
+								class="visually-hidden terrain-trigger"
+								type="radio"
+								name="terrain"
+								value="Psychic"
+								id="psychic"
+							/><label class="btn btn-right" for="psychic"
+								>Psychic</label
+							>
+						</div>
+						<hr />
+
+						<div
+							aria-labelledby="selectWeatherInstruction"
+							role="radiogroup"
+						>
+							<span class="visually-hidden" id="selectWeatherInstruction"
+								>Select the current weather condition.</span
+							>
+							<div
+								style="width: 22.2em; margin: 5px auto"
+								title="Select the current weather condition."
+							>
+								<input
+									class="weather visually-hidden"
+									type="radio"
+									name="weather"
+									value=""
+									id="clear"
+									checked="checked"
+								/>
+								<label class="btn btn-small btn-left" for="clear"
+									>None</label
+								>
+								<input
+									class="weather visually-hidden"
+									type="radio"
+									name="weather"
+									value="Sun"
+									id="sun"
+								/>
+								<label class="btn btn-small btn-mid" for="sun"
+									>Sun</label
+								>
+								<input
+									class="weather visually-hidden"
+									type="radio"
+									name="weather"
+									value="Rain"
+									id="rain"
+								/>
+								<label class="btn btn-small btn-mid" for="rain"
+									>Rain</label
+								>
+								<input
+									class="weather visually-hidden"
+									type="radio"
+									name="weather"
+									value="Sand"
+									id="sand"
+								/>
+								<label class="btn btn-small btn-mid" for="sand"
+									>Sand</label
+								>
+								<input
+									class="weather visually-hidden"
+									type="radio"
+									name="weather"
+									value="Snow"
+									id="snow"
+								/>
+								<label class="btn btn-small btn-right" for="snow"
+									>Snow</label
+								>
+							</div>
+						</div>
+						<hr />
+
+						<div
+							aria-labelledby="selectFieldStateInstruction"
+							role="group"
+						>
+							<span
+								class="visually-hidden"
+								id="selectFieldStateInstruction"
+								>Select the current field state.</span
+							>
+							<div
+								style="width: 22.2em; margin: 5px auto"
+								title="Select the current field state."
+							>
+								<input
+									class="field-state visually-hidden"
+									type="checkbox"
+									name="fieldState"
+									value="Gravity"
+									id="gravity"
+								/>
+								<label class="btn btn-small btn-left" for="gravity"
+									>Gravity</label
+								>
+								<input
+									class="field-state visually-hidden"
+									type="checkbox"
+									name="fieldState"
+									value="MagicRoom"
+									id="magic-room"
+								/>
+								<label class="btn btn-small btn-mid" for="magic-room"
+									>Magic Room</label
+								>
+								<input
+									class="field-state visually-hidden"
+									type="checkbox"
+									name="fieldState"
+									value="WonderRoom"
+									id="wonder-room"
+								/>
+								<label class="btn btn-small btn-right" for="wonder-room"
+									>Wonder Room</label
+								>
+							</div>
+						</div>
+						<hr />
+
+						<table class="field">
+							<thead>
+								<tr>
+									<th scope="col">
+										<div class="visually-hidden">Attacker's side</div>
+									</th>
+									<th scope="col">
+										<div class="visually-hidden">Defender's side</div>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<div hidden id="selectStealthRockInstruction">
+										Is Stealth Rock affecting this side of the field?
+									</div>
+									<td>
+										<div
+											class="left"
+											title="Is Stealth Rock affecting this side of the field?"
+										>
+											<input
+												aria-describedby="selectStealthRockInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="srL"
+											/>
+											<label class="btn btn-xwide" for="srL"
+												>Stealth Rock</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is Stealth Rock affecting this side of the field?"
+										>
+											<input
+												aria-describedby="selectStealthRockInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="srR"
+											/>
+											<label class="btn btn-xwide" for="srR"
+												>Stealth Rock</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<div hidden id="selectSpikeInstruction">
+										Are there Spikes on this side of the field?
+									</div>
+									<td>
+										<div
+											aria-labelledby="selectSpikeInstruction"
+											class="left"
+											role="radiogroup"
+											title="Are there Spikes on this side of the field?"
+										>
+											<input
+												class="visually-hidden"
+												type="radio"
+												name="spikesL"
+												value="0"
+												id="spikesL0"
+												checked="checked"
+											/>
+											<label
+												class="btn btn-xsmall btn-left"
+												for="spikesL0"
+												>0</label
+											>
+											<input
+												class="visually-hidden"
+												type="radio"
+												name="spikesL"
+												value="1"
+												id="spikesL1"
+											/>
+											<label
+												class="btn btn-xsmall btn-mid"
+												for="spikesL1"
+												>1</label
+											>
+											<input
+												class="visually-hidden"
+												type="radio"
+												name="spikesL"
+												value="2"
+												id="spikesL2"
+											/>
+											<label
+												class="btn btn-xsmall btn-mid"
+												for="spikesL2"
+												>2</label
+											>
+											<input
+												class="visually-hidden"
+												type="radio"
+												name="spikesL"
+												value="3"
+												id="spikesL3"
+											/>
+											<label
+												class="btn btn-wide btn-right"
+												for="spikesL3"
+												>3 Spikes</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											aria-labelledby="selectSpikeInstruction"
+											class="right"
+											role="radiogroup"
+											title="Are there Spikes on this side of the field?"
+										>
+											<input
+												class="visually-hidden"
+												type="radio"
+												name="spikesR"
+												value="0"
+												id="spikesR0"
+												checked="checked"
+											/>
+											<label
+												class="btn btn-xsmall btn-left"
+												for="spikesR0"
+												>0</label
+											>
+											<input
+												class="visually-hidden"
+												type="radio"
+												name="spikesR"
+												value="1"
+												id="spikesR1"
+											/>
+											<label
+												class="btn btn-xsmall btn-mid"
+												for="spikesR1"
+												>1</label
+											>
+											<input
+												class="visually-hidden"
+												type="radio"
+												name="spikesR"
+												value="2"
+												id="spikesR2"
+											/>
+											<label
+												class="btn btn-xsmall btn-mid"
+												for="spikesR2"
+												>2</label
+											>
+											<input
+												class="visually-hidden"
+												type="radio"
+												name="spikesR"
+												value="3"
+												id="spikesR3"
+											/>
+											<label
+												class="btn btn-wide btn-right"
+												for="spikesR3"
+												>3 Spikes</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is this Pok&eacute;mon protected by Reflect and/or Light Screen?"
+										>
+											<div hidden id="selectScreenInstruction">
+												Is this Pok&eacute;mon protected by Reflect
+												and/or Light Screen?
+											</div>
+											<input
+												aria-describedby="selectScreenInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="reflectL"
+											/>
+											<label class="btn btn-left" for="reflectL"
+												>Reflect</label
+											>
+											<input
+												aria-describedby="selectScreenInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="lightScreenL"
+											/>
+											<label
+												class="btn btn-xwide btn-right"
+												for="lightScreenL"
+												>Light Screen</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is this Pok&eacute;mon protected by Reflect and/or Light Screen?"
+										>
+											<input
+												aria-describedby="selectScreenInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="lightScreenR"
+											/>
+											<label
+												class="btn btn-xwide btn-left"
+												for="lightScreenR"
+												>Light Screen</label
+											>
+											<input
+												aria-describedby="selectScreenInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="reflectR"
+											/>
+											<label class="btn btn-right" for="reflectR"
+												>Reflect</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is the Pok&eacute;mon protected by an ally's Friend Guard?"
+										>
+											<div hidden id="selectFriendGuardInstruction">
+												Is the Pok&eacute;mon protected by an ally's
+												Friend Guard?
+											</div>
+											<input
+												aria-describedby="selectFriendGuardInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="friendGuardL"
+											/>
+											<label
+												class="btn btn-xxwide"
+												for="friendGuardL"
+												>Friend Guard</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is the Pok&eacute;mon protected by an ally's Friend Guard?"
+										>
+											<input
+												aria-describedby="selectFriendGuardInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="friendGuardR"
+											/>
+											<label
+												class="btn btn-xxwide"
+												for="friendGuardR"
+												>Friend Guard</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is the Pok&eacute;mon protected by an ally's Aurora Veil?"
+										>
+											<div hidden id="selectAuroraVeilInstruction">
+												Is the Pok&eacute;mon protected by an ally's
+												Aurora Veil?
+											</div>
+											<input
+												aria-describedby="selectAuroraVeilInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="auroraVeilL"
+											/>
+											<label class="btn btn-xxwide" for="auroraVeilL"
+												>Aurora Veil</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is the Pok&eacute;mon protected by an ally's Aurora Veil?"
+										>
+											<input
+												aria-describedby="selectAuroraVeilInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="auroraVeilR"
+											/>
+											<label class="btn btn-xxwide" for="auroraVeilR"
+												>Aurora Veil</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is this Pok&eacute;mon protected?"
+										>
+											<div hidden id="selectProtectInstruction">
+												Is this Pok&eacute;mon protected?
+											</div>
+											<input
+												aria-describedby="selectProtectInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="protectL"
+											/>
+											<label class="btn btn-wide" for="protectL"
+												>Protect</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is this Pok&eacute;mon protected?"
+										>
+											<input
+												aria-describedby="selectProtectInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="protectR"
+											/>
+											<label class="btn btn-wide" for="protectR"
+												>Protect</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon been affected by Leech Seed?"
+										>
+											<div hidden id="selectLeechSeedInstruction">
+												Has this Pok&eacute;mon been affected by
+												Leech Seed?
+											</div>
+											<input
+												aria-describedby="selectLeechSeedInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="leechSeedL"
+											/>
+											<label class="btn btn-wide" for="leechSeedL"
+												>Leech Seed</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon been affected by Leech Seed?"
+										>
+											<input
+												aria-describedby="selectLeechSeedInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="leechSeedR"
+											/>
+											<label class="btn btn-wide" for="leechSeedR"
+												>Leech Seed</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon been affected by Salt Cure?"
+										>
+											<div hidden id="selectSaltCureInstruction">
+												Has this Pok&eacute;mon been affected by
+												Salt Cure?
+											</div>
+											<input
+												aria-describedby="selectSaltCureInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="saltCureL"
+											/>
+											<label class="btn btn-wide" for="saltCureL"
+												>Salt Cure</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon been affected by Salt Cure?"
+										>
+											<input
+												aria-describedby="selectSaltCureInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="saltCureR"
+											/>
+											<label class="btn btn-wide" for="saltCureR"
+												>Salt Cure</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon powered up with Charge?"
+										>
+											<div hidden id="selectChargeInstruction">
+												Has this Pok&eacute;mon powered up with
+												Charge?
+											</div>
+											<input
+												aria-describedby="selectChargeInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="chargeL"
+											/>
+											<label class="btn btn-wide" for="chargeL"
+												>Charge</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon powered up with Charge?"
+										>
+											<input
+												aria-describedby="selectChargeInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="chargeR"
+											/>
+											<label class="btn btn-wide" for="chargeR"
+												>Charge</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon's power been boosted by an ally's Helping Hand?"
+										>
+											<div hidden id="selectHelpingHandInstruction">
+												Has this Pok&eacute;mon's power been boosted
+												by an ally's Helping Hand?
+											</div>
+											<input
+												aria-describedby="selectHelpingHandInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="helpingHandL"
+											/>
+											<label
+												class="btn btn-xxwide"
+												for="helpingHandL"
+												>Helping Hand</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon's power been boosted by an ally's Helping Hand?"
+										>
+											<input
+												aria-describedby="selectHelpingHandInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="helpingHandR"
+											/>
+											<label
+												class="btn btn-xxwide"
+												for="helpingHandR"
+												>Helping Hand</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has this Pok&eacute;mon's speed been boosted by Tailwind?"
+										>
+											<div hidden id="selectTailwindInstruction">
+												Has this Pok&eacute;mon's speed been boosted
+												by Tailwind?
+											</div>
+											<input
+												aria-describedby="selectTailwindInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="tailwindL"
+											/>
+											<label class="btn btn-xxwide" for="tailwindL"
+												>Tailwind</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has this Pok&eacute;mon's speed been boosted by Tailwind?"
+										>
+											<input
+												aria-describedby="selectTailwindInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="tailwindR"
+											/>
+											<label class="btn btn-xxwide" for="tailwindR"
+												>Tailwind</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is the Pok&eacute;mon affected by Power Trick?"
+										>
+											<div hidden id="selectPowerTrickInstruction">
+												Is the Pok&eacute;mon affected by Power
+												Trick?
+											</div>
+											<input
+												aria-describedby="selectPowerTrickInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="powerTrickL"
+											/>
+											<label class="btn btn-xxwide" for="powerTrickL"
+												>Power Trick</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is the Pok&eacute;mon affected by Power Trick?"
+										>
+											<input
+												aria-describedby="selectPowerTrickInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="powerTrickR"
+											/>
+											<label class="btn btn-xxwide" for="powerTrickR"
+												>Power Trick</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Has the Pok&eacute;mon boosted all its stats one stage?"
+										>
+											<div hidden id="selectStatBoostInstruction">
+												Has the Pok&eacute;mon boosted all its stats
+												one stage?
+											</div>
+											<input
+												aria-describedby="selectStatBoostInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="StatBoostL"
+											/>
+											<label class="btn btn-xxwide" for="StatBoostL"
+												>+1 All Stats</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Has the Pok&eacute;mon boosted all its stats one stage?"
+										>
+											<input
+												aria-describedby="selectStatBoostInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="StatBoostR"
+											/>
+											<label class="btn btn-xxwide" for="StatBoostR"
+												>+1 All Stats</label
+											>
+										</div>
+									</td>
+								</tr>
+								<tr>
+									<td>
+										<div
+											class="left"
+											title="Is the defending Pok&eacute;mon switching out?"
+										>
+											<div hidden id="selectSwitchingInstruction">
+												Is the defending Pok&eacute;mon switching
+												out?
+											</div>
+											<input
+												aria-describedby="selectSwitchingInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="switchingL"
+											/>
+											<label class="btn btn-xxwide" for="switchingL"
+												>Switching Out</label
+											>
+										</div>
+									</td>
+									<td>
+										<div
+											class="right"
+											title="Is the defending Pok&eacute;mon switching out?"
+										>
+											<input
+												aria-describedby="selectSwitchingInstruction"
+												class="visually-hidden"
+												type="checkbox"
+												id="switchingR"
+											/>
+											<label class="btn btn-xxwide" for="switchingR"
+												>Switching Out</label
+											>
+										</div>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</fieldset>
 				</div>
+			</div>
 
-				<div class="bulk-results">
-					<div class="progress-bar" id="progressBar">
-						<div class="progress-fill" id="progressFill"></div>
+			<div aria-label="Defender" role="region" class="panel">
+				<fieldset class="poke-info" id="p2">
+					<legend align="center">Defender</legend>
+					<select
+						class="set-selector"
+						id="defender"
+						style="width: 100%"
+					>
+						<option value="">Select Pokemon</option>
+					</select>
+
+					<div class="info-group">
+						<div>
+							<label for="defender_item">Item</label>
+							<select
+								id="defender_item"
+								class="item"
+								style="width: 14em"
+							></select>
+						</div>
 					</div>
-					<div class="progress-text" id="progressText">Processing...</div>
-					<div class="results-count" id="resultsCount"></div>
-					<table class="results-table">
-						<thead>
-							<tr>
-								<th>Pokemon</th>
-								<th>Points Needed</th>
-								<th>Best Move</th>
-								<th>Ability Required</th>
-								<th>Description</th>
-							</tr>
-						</thead>
-						<tbody id="resultsBody">
-							<tr>
-								<td colspan="5" style="text-align: center;">Configure defender and click Find Attackers</td>
-							</tr>
-						</tbody>
-					</table>
-				</div>
+					<div class="info-group">
+						<div>
+							<label for="defender_ability">Ability</label>
+							<select
+								id="defender_ability"
+								class="ability"
+								style="width: 14em"
+							></select>
+						</div>
+					</div>
+
+					<div class="info-group">
+						<table>
+							<thead>
+								<tr>
+									<th scope="col">Stat</th>
+									<th scope="col">EVs (0-32)</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr class="hp">
+									<th scope="row">
+										<label for="defender_hp">HP</label>
+									</th>
+									<td>
+										<input
+											type="number"
+											id="defender_hp"
+											value="0"
+											min="0"
+											max="32"
+											style="width: 60px"
+										/>
+									</td>
+								</tr>
+								<tr class="df">
+									<th scope="row">
+										<label for="defender_def">Def</label>
+									</th>
+									<td>
+										<input
+											type="number"
+											id="defender_def"
+											value="0"
+											min="0"
+											max="32"
+											style="width: 60px"
+										/>
+									</td>
+								</tr>
+								<tr class="sd">
+									<th scope="row">
+										<label for="defender_spd">SpD</label>
+									</th>
+									<td>
+										<input
+											type="number"
+											id="defender_spd"
+											value="0"
+											min="0"
+											max="32"
+											style="width: 60px"
+										/>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</fieldset>
 			</div>
 		</div>
 

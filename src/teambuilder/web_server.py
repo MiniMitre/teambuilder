@@ -273,16 +273,30 @@ def bulk_ko_finder_stream():
     if data.get('attacker_item'):
         attacker_opts['item'] = data['attacker_item']
 
-    defender_opts = {}
-    if data.get('defender_item'):
-        defender_opts['item'] = data['defender_item']
-    if data.get('defender_ability'):
-        defender_opts['ability'] = data['defender_ability']
+    # Build field options
+    field_opts = {}
+    if data.get('terrain'):
+        field_opts['terrain'] = data['terrain']
+    if data.get('weather'):
+        field_opts['weather'] = data['weather']
+    if data.get('format'):
+        field_opts['gameType'] = data['format'].capitalize()
 
-    # Build attacker options (if any)
-    attacker_opts = {}
-    if data.get('attacker_item'):
-        attacker_opts['item'] = data['attacker_item']
+    # Handle field states (can be multiple)
+    field_states = data.get('field', [])
+    if isinstance(field_states, str):
+        field_states = [field_states]
+    for state in field_states:
+        if state == 'Gravity':
+            field_opts['gravity'] = True
+        elif state == 'MagicRoom':
+            field_opts['isMagicRoom'] = True
+        elif state == 'WonderRoom':
+            field_opts['isWonderRoom'] = True
+
+    # Get side conditions from request (they're now objects, not individual fields)
+    defender_side = data.get('defender_side', {})
+    attacker_side = data.get('attacker_side', {})
 
     def generate():
         q = queue.Queue()
@@ -344,7 +358,10 @@ def bulk_ko_finder_stream():
                         percent=percent,
                         defender_evs=defender_evs if defender_evs else None,
                         defender_opts=defender_opts if defender_opts else None,
-                        attacker_opts=attacker_opts if attacker_opts else None
+                        attacker_opts=attacker_opts if attacker_opts else None,
+                        field_opts=field_opts if field_opts else None,
+                        defender_side=defender_side if defender_side else None,
+                        attacker_side=attacker_side if attacker_side else None
                     )
                     # Send all results at once
                     formatted_results = []
@@ -368,6 +385,9 @@ def bulk_ko_finder_stream():
                         defender_evs=defender_evs if defender_evs else None,
                         defender_opts=defender_opts if defender_opts else None,
                         attacker_opts=attacker_opts if attacker_opts else None,
+                        field_opts=field_opts if field_opts else None,
+                        defender_side=defender_side if defender_side else None,
+                        attacker_side=attacker_side if attacker_side else None,
                         only_super_effective=only_super_effective,
                         progress_callback=progress_callback,
                         result_callback=result_callback
@@ -437,16 +457,30 @@ def bulk_ko_finder():
     if data.get('attacker_item'):
         attacker_opts['item'] = data['attacker_item']
 
-    defender_opts = {}
-    if data.get('defender_item'):
-        defender_opts['item'] = data['defender_item']
-    if data.get('defender_ability'):
-        defender_opts['ability'] = data['defender_ability']
+    # Build field options
+    field_opts = {}
+    if data.get('terrain'):
+        field_opts['terrain'] = data['terrain']
+    if data.get('weather'):
+        field_opts['weather'] = data['weather']
+    if data.get('format'):
+        field_opts['gameType'] = data['format'].capitalize()
 
-    # Build attacker options (if any)
-    attacker_opts = {}
-    if data.get('attacker_item'):
-        attacker_opts['item'] = data['attacker_item']
+    # Handle field states (can be multiple)
+    field_states = data.get('field', [])
+    if isinstance(field_states, str):
+        field_states = [field_states]
+    for state in field_states:
+        if state == 'Gravity':
+            field_opts['gravity'] = True
+        elif state == 'MagicRoom':
+            field_opts['isMagicRoom'] = True
+        elif state == 'WonderRoom':
+            field_opts['isWonderRoom'] = True
+
+    # Get side conditions from request (they're now objects, not individual fields)
+    defender_side = data.get('defender_side', {})
+    attacker_side = data.get('attacker_side', {})
 
     try:
         # Get Pokemon names with filters applied
@@ -487,7 +521,10 @@ def bulk_ko_finder():
                 percent=percent,
                 defender_evs=defender_evs if defender_evs else None,
                 defender_opts=defender_opts if defender_opts else None,
-                attacker_opts=attacker_opts if attacker_opts else None
+                attacker_opts=attacker_opts if attacker_opts else None,
+                field_opts=field_opts if field_opts else None,
+                defender_side=defender_side if defender_side else None,
+                attacker_side=attacker_side if attacker_side else None
             )
         else:
             # Use can_ko_any_atk to find best move
@@ -497,6 +534,9 @@ def bulk_ko_finder():
                 defender_evs=defender_evs if defender_evs else None,
                 defender_opts=defender_opts if defender_opts else None,
                 attacker_opts=attacker_opts if attacker_opts else None,
+                field_opts=field_opts if field_opts else None,
+                defender_side=defender_side if defender_side else None,
+                attacker_side=attacker_side if attacker_side else None,
                 only_super_effective=only_super_effective
             )
             filter_results = filter_obj.run(candidates)

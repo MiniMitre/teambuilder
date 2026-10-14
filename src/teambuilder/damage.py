@@ -160,7 +160,9 @@ def verify_Min_EVs (
     defender_evs: dict | None = None,
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
-    field_opts: dict | None = None):
+    field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None):
 
     requests = [
     build_request(
@@ -171,6 +173,8 @@ def verify_Min_EVs (
         defender_opts=defender_opts,
         move_opts=move_opts,
         field_opts=field_opts,
+        defender_side=defender_side,
+        attacker_side=attacker_side,
     )
     for pair in minPairs
     ]
@@ -220,6 +224,8 @@ def most_damaging_ability(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
 ) -> BestAbility:
     """Which of the attacker's abilities hits hardest here, ties included.
 
@@ -241,6 +247,7 @@ def most_damaging_ability(
             attacker_evs=attacker_evs, attacker_opts=attacker_opts,
             defender_evs=defender_evs, defender_opts=defender_opts,
             move_opts=move_opts, field_opts=field_opts,
+            defender_side=defender_side, attacker_side=attacker_side,
         ),
     )
 
@@ -288,6 +295,8 @@ def min_evs_to_ko(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
 ) -> Investment | None:
     """Fewest attacking stat points that guarantee `percent`% damage, or None.
 
@@ -306,6 +315,8 @@ def min_evs_to_ko(
                 defender_opts=defender_opts,
                 move_opts=move_opts,
                 field_opts=field_opts,
+                defender_side=defender_side,
+                attacker_side=attacker_side,
             )
             for points in range(MAX_STAT_POINTS + 1)
         ],
@@ -471,6 +482,8 @@ def ko_filter(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
     db: Path = DB_PATH,
 ) -> DamageFilter:
     """Keeps candidates that can guarantee `percent`% damage on `defender`.
@@ -500,6 +513,7 @@ def ko_filter(
                 attacker_opts=attacker_opts,
                 defender_evs=defender_evs, defender_opts=defender_opts,
                 move_opts=move_opts, field_opts=field_opts,
+                defender_side=defender_side, attacker_side=attacker_side,
             )
             investment = min_evs_to_ko(
                 name, move, defender,
@@ -507,6 +521,7 @@ def ko_filter(
                 attacker_opts={**(attacker_opts or {}), "ability": best.names[0]},
                 defender_evs=defender_evs, defender_opts=defender_opts,
                 move_opts=move_opts, field_opts=field_opts,
+                defender_side=defender_side, attacker_side=attacker_side,
             )
             if investment is not None:
                 kept[name] = (investment,)
@@ -524,6 +539,8 @@ def can_ko_any_atk(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
     db: Path = DB_PATH,
     only_super_effective: bool = True,
     progress_callback: Callable[[str, int, int], None] | None = None,
@@ -571,6 +588,7 @@ def can_ko_any_atk(
                     attacker_opts=attacker_opts,
                     defender_evs=defender_evs, defender_opts=defender_opts,
                     move_opts=move_opts, field_opts=field_opts,
+                    defender_side=defender_side, attacker_side=attacker_side,
                 )
                 investment = min_evs_to_ko(
                     name, move, defender,
@@ -578,6 +596,7 @@ def can_ko_any_atk(
                     attacker_opts={**(attacker_opts or {}), "ability": best.names[0]},
                     defender_evs=defender_evs, defender_opts=defender_opts,
                     move_opts=move_opts, field_opts=field_opts,
+                    defender_side=defender_side, attacker_side=attacker_side,
                 )
                 if investment is None:
                     continue
