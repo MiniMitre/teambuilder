@@ -101,6 +101,22 @@
 			.results-table th {
 				background: #333;
 				font-weight: bold;
+				cursor: pointer;
+				user-select: none;
+				position: relative;
+			}
+			.results-table th:hover {
+				background: #3a3a3a;
+			}
+			.results-table th.sort-asc::after {
+				content: ' ▲';
+				position: absolute;
+				right: 8px;
+			}
+			.results-table th.sort-desc::after {
+				content: ' ▼';
+				position: absolute;
+				right: 8px;
 			}
 			.results-table tr:hover {
 				background: #3a3a3a;
@@ -187,7 +203,7 @@
 							</select>
 						</div>
 						<div class="filter-group">
-							<label for="type2">Type 2</label>
+							<label for="type2">Type 2 (optional)</label>
 							<select id="type2">
 								<option value="">Any</option>
 								<option value="Normal">Normal</option>
@@ -290,15 +306,15 @@
 					<table class="results-table">
 						<thead>
 							<tr>
-								<th>Name</th>
+								<th data-column="name">Name</th>
 								<th>Type</th>
-								<th>HP</th>
-								<th>Atk</th>
-								<th>Def</th>
-								<th>SpA</th>
-								<th>SpD</th>
-								<th>Spe</th>
-								<th>BST</th>
+								<th data-column="hp">HP</th>
+								<th data-column="atk">Atk</th>
+								<th data-column="def">Def</th>
+								<th data-column="spa">SpA</th>
+								<th data-column="spd">SpD</th>
+								<th data-column="spe">Spe</th>
+								<th data-column="bst">BST</th>
 							</tr>
 						</thead>
 						<tbody id="resultsBody">

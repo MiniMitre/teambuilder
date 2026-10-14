@@ -38,6 +38,21 @@ $(document).ready(function() {
         width: '100%'
     });
 
+    // Initialize Select2 for defender ability (optional field)
+    $('#defender_ability').append('<option value="">Any</option>');
+    $('#defender_ability').select2({
+        placeholder: 'Select Ability',
+        allowClear: true,
+        width: '100%'
+    });
+
+    // Initialize Select2 for type filter (options already in HTML)
+    $('#filter_type1').select2({
+        placeholder: 'Any',
+        allowClear: true,
+        width: '100%'
+    });
+
     // Load Pokemon list
     $.get('/api/pokemon', function(data) {
         data.forEach(function(pokemon) {
@@ -50,8 +65,14 @@ $(document).ready(function() {
         $('.item').each(function() {
             const $this = $(this);
             $this.empty();
+            $this.append('<option value="">Select Item</option>');
             data.forEach(function(item) {
                 $this.append('<option value="' + item + '">' + item + '</option>');
+            });
+            $this.select2({
+                placeholder: 'Select Item',
+                allowClear: true,
+                width: '100%'
             });
         });
     });
@@ -74,6 +95,14 @@ $(document).ready(function() {
                 data.forEach(function(ability) {
                     $('#attacker_ability').append('<option value="' + ability + '">' + ability + '</option>');
                 });
+                // Initialize Select2 for ability if not already initialized
+                if (!$('#attacker_ability').data('select2')) {
+                    $('#attacker_ability').select2({
+                        placeholder: 'Select Ability',
+                        allowClear: true,
+                        width: '100%'
+                    });
+                }
                 // Auto-select if only one ability
                 if (data.length === 1) {
                     $('#attacker_ability').val(data[0]);
@@ -124,16 +153,18 @@ $(document).ready(function() {
             $('#searchBtn').prop('disabled', true);
             $('#progressBar').show();
             $('#progressFill').css('width', '0%');
-            $('#progressText').show().text('Processing... this may take a while');
+            $('#progressText').show().text('Initializing...');
             $('#resultsBody').html('<tr><td colspan="6" style="text-align: center;">Calculating... this may take several minutes</td></tr>');
             $('#resultsCount').text('');
 
             // Simulate progress (since we can't get real progress from the backend)
+            // Use a slower, more realistic progress update
             let progress = 0;
             const progressInterval = setInterval(function() {
-                progress += 5;
-                if (progress > 90) progress = 90;
+                progress += 2; // Slower increment
+                if (progress > 95) progress = 95;
                 $('#progressFill').css('width', progress + '%');
+                $('#progressText').text(`Processing... ${Math.round(progress)}%`);
             }, 1000);
 
             // Make AJAX request

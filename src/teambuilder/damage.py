@@ -526,6 +526,8 @@ def can_ko_any_atk(
     field_opts: dict | None = None,
     db: Path = DB_PATH,
     only_super_effective: bool = True,
+    progress_callback: Callable[[str, int, int], None] | None = None,
+    result_callback: Callable[[dict], None] | None = None,
 ) -> DamageFilter:
     """Keeps candidates with any attack that guarantees `percent`% on `defender`.
 
@@ -535,6 +537,12 @@ def can_ko_any_atk(
 
     If `only_super_effective` is True, only checks moves that are super effective
     against the defender's types. This significantly speeds up the calculation.
+
+    If `progress_callback` is provided, it will be called with (current_name, current_index, total)
+    for each candidate processed.
+
+    If `result_callback` is provided, it will be called with a formatted result dict when a
+    successful KO is found.
     """
     # Get defender's types for filtering
     defender_types_row = _query("SELECT type1, type2 FROM pokemon WHERE name = ?", [defender], db=db)
@@ -544,7 +552,13 @@ def can_ko_any_atk(
 
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         kept = {}
-        for name in tqdm(_species_names(candidates), desc=f"Attacks that KO {defender}"):
+        candidate_list = list(_species_names(candidates))
+        total = len(candidate_list)
+        # Use tqdm for console output if no callback, otherwise disable it
+        iterator = tqdm(candidate_list, desc=f"Attacks that KO {defender}", disable=progress_callback is not None)
+        for idx, name in enumerate(iterator):
+            if progress_callback:
+                progress_callback(name, idx + 1, total)
             cheapest = None
             for move in _damaging_moves(name, db=db):
                 # Filter to only super effective moves if requested
@@ -574,6 +588,14 @@ def can_ko_any_atk(
                     break          # free already, nothing can beat it
             if cheapest is not None:
                 kept[name] = (cheapest,)
+                if result_callback:
+                    result_callback({
+                        'name': name,
+                        'points': cheapest.points,
+                        'move': cheapest.move if cheapest.move else 'Best move',
+                        'ability': cheapest.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in cheapest.desc else 'Any',
+                        'desc': cheapest.desc
+                    })
         return kept
 
     return DamageFilter(f"KOes {defender} with some attack", run)

@@ -33,7 +33,14 @@ $(document).ready(function() {
 
     // Initialize Select2 for move input
     $('#move').select2({
-        placeholder: 'Leave empty for best move',
+        placeholder: 'Any (best move)',
+        allowClear: true,
+        width: '100%'
+    });
+
+    // Initialize Select2 for type filter (options already in HTML)
+    $('#filter_type1').select2({
+        placeholder: 'Any',
         allowClear: true,
         width: '100%'
     });
@@ -47,6 +54,7 @@ $(document).ready(function() {
 
     // Load all moves
     $.get('/api/moves', function(data) {
+        $('#move').append('<option value="">Any (best move)</option>');
         data.forEach(function(move) {
             $('#move').append('<option value="' + move + '">' + move + '</option>');
         });
@@ -57,8 +65,14 @@ $(document).ready(function() {
         $('.item').each(function() {
             const $this = $(this);
             $this.empty();
+            $this.append('<option value="">Select Item</option>');
             data.forEach(function(item) {
                 $this.append('<option value="' + item + '">' + item + '</option>');
+            });
+            $this.select2({
+                placeholder: 'Select Item',
+                allowClear: true,
+                width: '100%'
             });
         });
     });
@@ -72,6 +86,14 @@ $(document).ready(function() {
                 data.forEach(function(ability) {
                     $('#defender_ability').append('<option value="' + ability + '">' + ability + '</option>');
                 });
+                // Initialize Select2 for ability if not already initialized
+                if (!$('#defender_ability').data('select2')) {
+                    $('#defender_ability').select2({
+                        placeholder: 'Select Ability',
+                        allowClear: true,
+                        width: '100%'
+                    });
+                }
                 // Auto-select if only one ability
                 if (data.length === 1) {
                     $('#defender_ability').val(data[0]);
@@ -113,53 +135,62 @@ $(document).ready(function() {
             only_super_effective: $('#only_super_effective').is(':checked')
         };
 
+        console.log('Sending data:', data);
+
         // Show loading state
         $('#searchBtn').prop('disabled', true);
         $('#progressBar').show();
         $('#progressFill').css('width', '0%');
-        $('#progressText').show().text('Processing... this may take a while');
-        $('#resultsBody').html('<tr><td colspan="5" style="text-align: center;">Calculating... this may take several minutes</td></tr>');
-        $('#resultsCount').text('');
+        $('#progressText').show().text('Initializing...');
+        $('#resultsBody').empty();
+        $('#resultsCount').text('0 results');
 
-        // Simulate progress (since we can't get real progress from the backend)
-        let progress = 0;
-        const progressInterval = setInterval(function() {
-            progress += 5;
-            if (progress > 90) progress = 90;
-            $('#progressFill').css('width', progress + '%');
-        }, 1000);
+        // Use Server-Sent Events for real-time progress
+        const queryString = $.param(data);
+        const eventSource = new EventSource('/api/bulk-ko-stream?' + queryString);
 
-        // Make AJAX request
-        $.ajax({
-            url: '/api/bulk-ko',
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify(data),
-            success: function(response) {
-                clearInterval(progressInterval);
+        eventSource.onmessage = function(event) {
+            const msg = JSON.parse(event.data);
+
+            if (msg.type === 'start') {
+                $('#progressText').text(`Starting to check ${msg.total} Pokemon...`);
+            } else if (msg.type === 'progress') {
+                const percent = msg.percent;
+                $('#progressFill').css('width', percent + '%');
+                $('#progressText').text(`Checking ${msg.current}/${msg.total}: ${msg.name}... (${percent}%)`);
+            } else if (msg.type === 'result') {
+                // Append result to table in real-time
+                appendResult(msg.result);
+            } else if (msg.type === 'batch_results') {
+                // Display all results at once (for specific move mode)
+                displayResults(msg.results);
+            } else if (msg.type === 'complete') {
+                eventSource.close();
                 $('#progressFill').css('width', '100%');
-
-                if (response.success) {
-                    displayResults(response.results);
-                } else {
-                    $('#resultsBody').html('<tr><td colspan="5" style="text-align: center; color: red;">Error: ' + response.error + '</td></tr>');
-                    $('#resultsCount').text('');
-                }
-            },
-            error: function(xhr, status, error) {
-                clearInterval(progressInterval);
-                $('#progressFill').css('width', '100%');
-                $('#resultsBody').html('<tr><td colspan="5" style="text-align: center; color: red;">Error: ' + error + '</td></tr>');
-                $('#resultsCount').text('');
-            },
-            complete: function() {
                 $('#searchBtn').prop('disabled', false);
+
+                if (!msg.success) {
+                    $('#resultsBody').html('<tr><td colspan="5" style="text-align: center; color: red;">Error: ' + msg.error + '</td></tr>');
+                    $('#resultsCount').text('');
+                } else if ($('#resultsBody tr').length === 0) {
+                    // No results found
+                    $('#resultsBody').html('<tr><td colspan="5" style="text-align: center;">No attackers found that can KO this defender</td></tr>');
+                }
+
                 setTimeout(function() {
                     $('#progressBar').hide();
                     $('#progressText').hide();
                 }, 1000);
             }
-        });
+        };
+
+        eventSource.onerror = function() {
+            eventSource.close();
+            $('#searchBtn').prop('disabled', false);
+            $('#progressBar').hide();
+            $('#progressText').hide();
+            $('#resultsBody').html('<tr><td colspan="5" style="text-align: center; color: red;">Connection error</td></tr>');
+        };
     }
 
     function displayResults(results) {
@@ -190,5 +221,23 @@ $(document).ready(function() {
         });
 
         $('#resultsBody').html(html);
+    }
+
+    function appendResult(result) {
+        // Get current count
+        const currentCount = $('#resultsBody tr').length;
+        $('#resultsCount').text(currentCount + ' result' + (currentCount !== 0 ? 's' : ''));
+
+        // Append the new result
+        const row = `
+            <tr>
+                <td>${result.name}</td>
+                <td>${result.points}</td>
+                <td>${result.move}</td>
+                <td>${result.ability}</td>
+                <td>${result.desc}</td>
+            </tr>
+        `;
+        $('#resultsBody').append(row);
     }
 });

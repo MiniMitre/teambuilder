@@ -1,6 +1,7 @@
-from flask import Flask, send_from_directory, jsonify, request, render_template
+from flask import Flask, send_from_directory, jsonify, request, render_template, Response, stream_with_context
 from pathlib import Path
 import os
+import json
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
@@ -166,7 +167,7 @@ def get_move_category(move):
 def search_pokemon():
     """Search Pokemon with filters for type, stats, and move learning."""
     from teambuilder.pokedex import search
-    from teambuilder.filters import Filter, has_type, has_type1, has_type2, learns, min_stat, max_stat, stat_between
+    from teambuilder.filters import Filter, has_type, learns, min_stat, max_stat, stat_between
 
     data = request.json
 
@@ -176,11 +177,17 @@ def search_pokemon():
     # Type filter (single or dual type)
     type1 = data.get('type1')
     type2 = data.get('type2')
-    if type1:
-        type_filter = has_type1(type1)
+    if type1 and type2:
+        # Both types selected - Pokemon must have both types in any order
+        type_filter = (has_type(type1) & has_type(type2))
         filters = type_filter if filters is None else filters & type_filter
-    if type2:
-        type_filter = has_type2(type2)
+    elif type1:
+        # Only type1 selected - Pokemon must have this type in either position
+        type_filter = has_type(type1)
+        filters = type_filter if filters is None else filters & type_filter
+    elif type2:
+        # Only type2 selected - Pokemon must have this type in either position
+        type_filter = has_type(type2)
         filters = type_filter if filters is None else filters & type_filter
 
     # Stat range filters
@@ -227,6 +234,173 @@ def search_pokemon():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
+@app.route('/api/bulk-ko-stream', methods=['GET'])
+def bulk_ko_finder_stream():
+    """Find which Pokemon can KO a specific defender with SSE streaming."""
+    from teambuilder.pokedex import search_names, search
+    from teambuilder.damage import can_ko, can_ko_any_atk
+    from teambuilder.filters import has_type, min_stat
+    import queue
+    import threading
+
+    data = request.args
+
+    defender = data.get('defender')
+    if not defender:
+        return jsonify({'success': False, 'error': 'Defender Pokemon is required'}), 400
+
+    move = data.get('move')  # Optional - if provided, use can_ko
+    percent = float(data.get('percent', 100.0))
+    only_super_effective = data.get('only_super_effective', 'true').lower() == 'true'
+
+    # Build defender options
+    defender_evs = {}
+    if data.get('defender_hp'):
+        defender_evs['hp'] = int(data['defender_hp'])
+    if data.get('defender_def'):
+        defender_evs['def'] = int(data['defender_def'])
+    if data.get('defender_spd'):
+        defender_evs['spd'] = int(data['defender_spd'])
+
+    defender_opts = {}
+    if data.get('defender_item'):
+        defender_opts['item'] = data['defender_item']
+    if data.get('defender_ability'):
+        defender_opts['ability'] = data['defender_ability']
+
+    # Build attacker options (if any)
+    attacker_opts = {}
+    if data.get('attacker_item'):
+        attacker_opts['item'] = data['attacker_item']
+
+    defender_opts = {}
+    if data.get('defender_item'):
+        defender_opts['item'] = data['defender_item']
+    if data.get('defender_ability'):
+        defender_opts['ability'] = data['defender_ability']
+
+    # Build attacker options (if any)
+    attacker_opts = {}
+    if data.get('attacker_item'):
+        attacker_opts['item'] = data['attacker_item']
+
+    def generate():
+        q = queue.Queue()
+
+        def progress_callback(name, current, total):
+            q.put({
+                'type': 'progress',
+                'name': name,
+                'current': current,
+                'total': total,
+                'percent': round((current / total) * 100, 1)
+            })
+
+        def result_callback(result):
+            q.put({
+                'type': 'result',
+                'result': result
+            })
+
+        def run_calculation():
+            try:
+                # Get Pokemon names with filters applied
+                filters = None
+
+                # Apply attacker filters to narrow down candidates
+                filter_type1 = data.get('filter_type1')
+                if filter_type1:
+                    type_filter = has_type(filter_type1)
+                    filters = type_filter if filters is None else filters & type_filter
+
+                filter_min_bst = data.get('filter_min_bst')
+                if filter_min_bst:
+                    bst_filter = min_stat('bst', int(filter_min_bst))
+                    filters = bst_filter if filters is None else filters & bst_filter
+
+                filter_min_spe = data.get('filter_min_spe')
+                if filter_min_spe:
+                    spe_filter = min_stat('spe', int(filter_min_spe))
+                    filters = spe_filter if filters is None else filters & spe_filter
+
+                # Get candidates - either filtered or all
+                if filters:
+                    filtered_results = search(filters, columns="name")
+                    candidates = [row[0] for row in filtered_results]
+                else:
+                    candidates = search_names()
+
+                q.put({
+                    'type': 'start',
+                    'total': len(candidates)
+                })
+
+                if move:
+                    # Use can_ko for specific move (no streaming support for this mode)
+                    results = can_ko(
+                        candidates,
+                        move,
+                        defender,
+                        percent=percent,
+                        defender_evs=defender_evs if defender_evs else None,
+                        defender_opts=defender_opts if defender_opts else None,
+                        attacker_opts=attacker_opts if attacker_opts else None
+                    )
+                    # Send all results at once
+                    formatted_results = []
+                    for name, investment in results.items():
+                        formatted_results.append({
+                            'name': name,
+                            'points': investment.points,
+                            'move': investment.move if investment.move else move,
+                            'ability': investment.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in investment.desc else 'Any',
+                            'desc': investment.desc
+                        })
+                    q.put({
+                        'type': 'batch_results',
+                        'results': formatted_results
+                    })
+                else:
+                    # Use can_ko_any_atk to find best move
+                    filter_obj = can_ko_any_atk(
+                        defender,
+                        percent=percent,
+                        defender_evs=defender_evs if defender_evs else None,
+                        defender_opts=defender_opts if defender_opts else None,
+                        attacker_opts=attacker_opts if attacker_opts else None,
+                        only_super_effective=only_super_effective,
+                        progress_callback=progress_callback,
+                        result_callback=result_callback
+                    )
+                    filter_results = filter_obj.run(candidates)
+                    # Results are already streamed via result_callback, just send completion
+
+                q.put({
+                    'type': 'complete',
+                    'success': True
+                })
+            except Exception as e:
+                q.put({
+                    'type': 'complete',
+                    'success': False,
+                    'error': str(e)
+                })
+            finally:
+                q.put(None)  # Signal end
+
+        # Start calculation in a separate thread
+        thread = threading.Thread(target=run_calculation)
+        thread.start()
+
+        # Stream results
+        while True:
+            msg = q.get()
+            if msg is None:
+                break
+            yield f"data: {json.dumps(msg)}\n\n"
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
 @app.route('/api/bulk-ko', methods=['POST'])
 def bulk_ko_finder():
     """Find which Pokemon can KO a specific defender."""
@@ -251,6 +425,17 @@ def bulk_ko_finder():
         defender_evs['def'] = int(data['defender_def'])
     if data.get('defender_spd'):
         defender_evs['spd'] = int(data['defender_spd'])
+
+    defender_opts = {}
+    if data.get('defender_item'):
+        defender_opts['item'] = data['defender_item']
+    if data.get('defender_ability'):
+        defender_opts['ability'] = data['defender_ability']
+
+    # Build attacker options (if any)
+    attacker_opts = {}
+    if data.get('attacker_item'):
+        attacker_opts['item'] = data['attacker_item']
 
     defender_opts = {}
     if data.get('defender_item'):
@@ -290,6 +475,9 @@ def bulk_ko_finder():
         else:
             candidates = search_names()
 
+        # Only check super effective moves by default for performance
+        only_super_effective = data.get('only_super_effective', 'true').lower() == 'true'
+
         if move:
             # Use can_ko for specific move
             results = can_ko(
@@ -303,8 +491,6 @@ def bulk_ko_finder():
             )
         else:
             # Use can_ko_any_atk to find best move
-            # Only check super effective moves by default for performance
-            only_super_effective = data.get('only_super_effective', True)
             filter_obj = can_ko_any_atk(
                 defender,
                 percent=percent,

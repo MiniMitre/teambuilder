@@ -32,15 +32,6 @@ $(document).ready(function() {
         dropdownParent: $('.filter-section:has(#move)')
     });
 
-    // Load all moves
-    $.get('/api/moves', function(data) {
-        data.forEach(function(move) {
-            $('#move').append('<option value="' + move + '">' + move + '</option>');
-        });
-        // Ensure "Any" (empty value) is selected by default
-        $('#move').val(null).trigger('change');
-    });
-
     // Type color mapping
     const typeColors = {
         'Normal': '#A8A878',
@@ -63,31 +54,81 @@ $(document).ready(function() {
         'Fairy': '#EE99AC'
     };
 
+    // Store all Pokemon data
+    let allPokemon = [];
+    let allMoves = [];
+    let currentSort = { column: null, direction: 'asc' };
+
+    // Load all Pokemon and moves on page load
+    function loadAllData() {
+        // Load all Pokemon
+        $.ajax({
+            url: '/api/search',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({}),
+            success: function(response) {
+                if (response.success) {
+                    allPokemon = response.results;
+                    performClientSearch();
+                }
+            }
+        });
+
+        // Load all moves
+        $.get('/api/moves', function(data) {
+            allMoves = data;
+            data.forEach(function(move) {
+                $('#move').append('<option value="' + move + '">' + move + '</option>');
+            });
+            $('#move').val(null).trigger('change');
+        });
+    }
+
     // Search button click handler
     $('#searchBtn').click(function() {
-        performSearch();
+        performClientSearch();
     });
 
     // Auto-filter on any input change
     $('.filter-group input, .filter-group select').on('input change', function() {
-        performSearch();
+        performClientSearch();
     });
 
     // Select2 change event for move dropdown
     $('#move').on('change', function() {
-        performSearch();
+        performClientSearch();
     });
 
-    // Debounce for number inputs to avoid too many requests while typing
+    // Debounce for number inputs
     let debounceTimer;
     $('.filter-group input[type="number"]').on('input', function() {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(function() {
-            performSearch();
-        }, 300);
+            performClientSearch();
+        }, 100);
     });
 
-    function performSearch() {
+    // Sort handler for table headers
+    $('.results-table th').click(function() {
+        const column = $(this).data('column');
+        if (!column) return;
+
+        if (currentSort.column === column) {
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort.column = column;
+            currentSort.direction = 'asc';
+        }
+
+        // Update sort indicators
+        $('.results-table th').removeClass('sort-asc sort-desc');
+        $(this).addClass(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+
+        performClientSearch();
+    });
+
+    function performClientSearch() {
         // Collect filter values
         const type1Val = $('#type1').val();
         const type2Val = $('#type2').val();
@@ -113,11 +154,69 @@ $(document).ready(function() {
             move: (moveVal && moveVal !== '') ? moveVal : null
         };
 
-        // Show loading state
-        $('#resultsBody').html('<tr><td colspan="10" style="text-align: center;">Searching...</td></tr>');
-        $('#resultsCount').text('');
+        // If move filter is set, use server-side search
+        if (filters.move) {
+            performServerSearch(filters);
+            return;
+        }
 
-        // Make AJAX request
+        // Filter Pokemon client-side
+        let filtered = allPokemon.filter(pokemon => {
+            // Type filters - match regardless of order
+            if (filters.type1 && filters.type2) {
+                // Both types selected - Pokemon must have both types in any order
+                const hasType1 = pokemon.type1 === filters.type1 || pokemon.type2 === filters.type1;
+                const hasType2 = pokemon.type1 === filters.type2 || pokemon.type2 === filters.type2;
+                if (!hasType1 || !hasType2) return false;
+            } else if (filters.type1) {
+                // Only type1 selected - Pokemon must have this type in either position
+                if (pokemon.type1 !== filters.type1 && pokemon.type2 !== filters.type1) return false;
+            } else if (filters.type2) {
+                // Only type2 selected - Pokemon must have this type in either position
+                if (pokemon.type1 !== filters.type2 && pokemon.type2 !== filters.type2) return false;
+            }
+
+            // Stat filters
+            if (filters.hp_min !== null && pokemon.hp < filters.hp_min) return false;
+            if (filters.hp_max !== null && pokemon.hp > filters.hp_max) return false;
+            if (filters.atk_min !== null && pokemon.atk < filters.atk_min) return false;
+            if (filters.atk_max !== null && pokemon.atk > filters.atk_max) return false;
+            if (filters.def_min !== null && pokemon.def < filters.def_min) return false;
+            if (filters.def_max !== null && pokemon.def > filters.def_max) return false;
+            if (filters.spa_min !== null && pokemon.spa < filters.spa_min) return false;
+            if (filters.spa_max !== null && pokemon.spa > filters.spa_max) return false;
+            if (filters.spd_min !== null && pokemon.spd < filters.spd_min) return false;
+            if (filters.spd_max !== null && pokemon.spd > filters.spd_max) return false;
+            if (filters.spe_min !== null && pokemon.spe < filters.spe_min) return false;
+            if (filters.spe_max !== null && pokemon.spe > filters.spe_max) return false;
+            if (filters.bst_min !== null && pokemon.bst < filters.bst_min) return false;
+            if (filters.bst_max !== null && pokemon.bst > filters.bst_max) return false;
+
+            return true;
+        });
+
+        // Apply sorting
+        if (currentSort.column) {
+            filtered.sort((a, b) => {
+                let aVal = a[currentSort.column];
+                let bVal = b[currentSort.column];
+
+                // Handle string comparison for name
+                if (typeof aVal === 'string') {
+                    aVal = aVal.toLowerCase();
+                    bVal = bVal.toLowerCase();
+                }
+
+                if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        displayResults(filtered);
+    }
+
+    function performServerSearch(filters) {
         $.ajax({
             url: '/api/search',
             method: 'POST',
@@ -174,6 +273,6 @@ $(document).ready(function() {
         $('#resultsBody').html(html);
     }
 
-    // Perform initial search on page load
-    performSearch();
+    // Load data on page load
+    loadAllData();
 });
