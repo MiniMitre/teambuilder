@@ -317,6 +317,12 @@ footer a.cur:hover {
 	vertical-align: middle;
 }
 
+#survival-results-toggle .btn {
+	min-height: auto;
+	width: auto;
+	padding: 0.5rem;
+}
+
 select {
 	cursor: pointer;
 	text-align: left;
@@ -564,7 +570,7 @@ th {
 .header-section {
 	display: flex;
 	flex-direction: column;
-	gap: 0.5em;
+	gap: 1em;
 }
 
 /* header */

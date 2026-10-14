@@ -6,8 +6,8 @@ app = Flask(__name__, template_folder='templates', static_folder='static')
 
 @app.route('/')
 def index():
-    """Serve the survival calculator HTML."""
-    return render_template('survival.html')
+    """Serve the combined calculator page."""
+    return render_template('calculator.html')
 
 @app.route('/api/pokemon')
 def get_pokemon():
@@ -120,26 +120,26 @@ def get_move_category(move):
 def calculate_survival():
     """API endpoint for survival calculation using Python backend."""
     from teambuilder.damage import min_evs_to_survive
-    
+
     data = request.json
-    
+
     attacker = data.get('attacker')
     move = data.get('move')
     defender = data.get('defender')
     percent = data.get('percent', 100)
     show_all = data.get('showAll', False)
-    
+
     # Parse attacker_evs from simplified format
     attacker_evs_str = data.get('attacker_evs', '0')
     attacker_evs = attacker_evs_str
-    
+
     # Build options from the data
     attacker_opts = {}
     if data.get('attacker_item'):
         attacker_opts['item'] = data['attacker_item']
     if data.get('attacker_ability'):
         attacker_opts['ability'] = data['attacker_ability']
-    
+
     defender_evs = {}
     # No defender EVs input - the calculator will determine optimal spread
 
@@ -199,13 +199,13 @@ def calculate_survival():
     if data.get('spd_boost'):
         defender_opts['boosts'] = defender_opts.get('boosts', {})
         defender_opts['boosts']['spd'] = int(data['spd_boost'])
-    
+
     field_opts = {}
     if data.get('terrain'):
         field_opts['terrain'] = data['terrain']
     if data.get('weather'):
         field_opts['weather'] = data['weather']
-    
+
     # Handle field states (can be multiple)
     field_states = data.get('field', [])
     if isinstance(field_states, str):
@@ -217,7 +217,7 @@ def calculate_survival():
             field_opts['isMagicRoom'] = True
         elif state == 'WonderRoom':
             field_opts['isWonderRoom'] = True
-    
+
     # Side conditions
     defender_side = {}
     if data.get('isReflect'):
@@ -249,21 +249,21 @@ def calculate_survival():
             defender_opts['boosts'][stat] = defender_opts['boosts'].get(stat, 0) + 1
     if data.get('isSwitching'):
         defender_side['isSwitching'] = True
-    
+
     if defender_side:
         field_opts['defenderSide'] = defender_side
-    
+
     # Spikes and Stealth Rock
     if data.get('spikesR'):
         field_opts['defenderSide'] = field_opts.get('defenderSide', {})
         field_opts['defenderSide']['spikes'] = int(data['spikesR'])
-    
+
     # Stealth Rock is handled via a separate option - need to check the calculator API
     # For now, we'll add it if it's checked
     if data.get('isStealthRock'):
         field_opts['defenderSide'] = field_opts.get('defenderSide', {})
         field_opts['defenderSide']['isSR'] = True
-    
+
     try:
         result = min_evs_to_survive(
             attacker, move, defender,
@@ -275,10 +275,10 @@ def calculate_survival():
             defender_opts=defender_opts if defender_opts else None,
             field_opts=field_opts if field_opts else None,
         )
-        
+
         if result is None:
             return jsonify({'success': False, 'message': 'No viable spread found'})
-        
+
         results = []
         for inv in result:
             results.append({
@@ -288,7 +288,181 @@ def calculate_survival():
                 'damage': inv.damage,
                 'spread': inv.spread
             })
-        
+
+        return jsonify({'success': True, 'results': results})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+
+@app.route('/api/ko-calculation', methods=['POST'])
+def calculate_ko():
+    """API endpoint for KO calculation using Python backend."""
+    from teambuilder.damage import min_evs_to_ko, attacking_stat
+
+    data = request.json
+
+    attacker = data.get('attacker')
+    move = data.get('move')
+    defender = data.get('defender')
+    percent = data.get('percent', 100)
+
+    # Build attacker opts
+    attacker_opts = {}
+    if data.get('attacker_item'):
+        attacker_opts['item'] = data['attacker_item']
+    if data.get('attacker_ability'):
+        attacker_opts['ability'] = data['attacker_ability']
+    if data.get('attacker_boost'):
+        attacker_opts['boosts'] = attacker_opts.get('boosts', {})
+        attacker_opts['boosts']['atk'] = int(data['attacker_boost'])
+        attacker_opts['boosts']['spa'] = int(data['attacker_boost'])
+
+    # Handle attacker nature - map to actual Pokemon nature based on move category
+    attacker_nature_multiplier = data.get('attacker_nature', '1.0')
+    if attacker_nature_multiplier != '1.0':
+        # We need to know which stat the move uses to pick the right nature
+        # +10% Atk = Adamant, +10% SpA = Modest
+        # -10% Atk = Modest, -10% SpA = Adamant
+        from teambuilder.calc import move_category
+        move_cat = move_category(move)
+
+        if attacker_nature_multiplier == '1.1':
+            # Positive nature for the attacking stat
+            if move_cat == 'Physical':
+                attacker_opts['nature'] = 'Adamant'  # +Atk
+            else:
+                attacker_opts['nature'] = 'Modest'  # +SpA
+        elif attacker_nature_multiplier == '0.9':
+            # Negative nature for the attacking stat
+            if move_cat == 'Physical':
+                attacker_opts['nature'] = 'Modest'  # -Atk
+            else:
+                attacker_opts['nature'] = 'Adamant'  # -SpA
+
+    # Build defender opts
+    defender_opts = {}
+    if data.get('defender_item'):
+        defender_opts['item'] = data['defender_item']
+    if data.get('defender_ability'):
+        defender_opts['ability'] = data['defender_ability']
+
+    # Handle defender nature - prioritize the defensive stat being attacked
+    def_nature = data.get('def_nature', '1.0')
+    spd_nature = data.get('spd_nature', '1.0')
+
+    # Nature mapping for defender
+    nature_map = {
+        '1.1': {'def': 'Bold', 'spd': 'Calm'},
+        '1.0': {'def': 'Serious', 'spd': 'Serious'},
+        '0.9': {'def': 'Hasty', 'spd': 'Naive'}
+    }
+
+    selected_nature = 'Serious'
+    if def_nature != '1.0':
+        selected_nature = nature_map[def_nature]['def']
+    elif spd_nature != '1.0':
+        selected_nature = nature_map[spd_nature]['spd']
+
+    defender_opts['nature'] = selected_nature
+
+    # Handle defender stat boosts
+    if data.get('def_boost'):
+        defender_opts['boosts'] = defender_opts.get('boosts', {})
+        defender_opts['boosts']['def'] = int(data['def_boost'])
+    if data.get('spd_boost'):
+        defender_opts['boosts'] = defender_opts.get('boosts', {})
+        defender_opts['boosts']['spd'] = int(data['spd_boost'])
+
+    # Build defender_evs from the specific values
+    defender_evs = {}
+    if data.get('defender_hp'):
+        defender_evs['hp'] = int(data['defender_hp'])
+    if data.get('defender_def'):
+        defender_evs['def'] = int(data['defender_def'])
+    if data.get('defender_spd'):
+        defender_evs['spd'] = int(data['defender_spd'])
+
+    field_opts = {}
+    if data.get('terrain'):
+        field_opts['terrain'] = data['terrain']
+    if data.get('weather'):
+        field_opts['weather'] = data['weather']
+
+    # Handle field states (can be multiple)
+    field_states = data.get('field', [])
+    if isinstance(field_states, str):
+        field_states = [field_states]
+    for state in field_states:
+        if state == 'Gravity':
+            field_opts['gravity'] = True
+        elif state == 'MagicRoom':
+            field_opts['isMagicRoom'] = True
+        elif state == 'WonderRoom':
+            field_opts['isWonderRoom'] = True
+
+    # Side conditions
+    defender_side = {}
+    if data.get('isReflect'):
+        defender_side['isReflect'] = True
+    if data.get('isLightScreen'):
+        defender_side['isLightScreen'] = True
+    if data.get('isAuroraVeil'):
+        defender_side['isAuroraVeil'] = True
+    if data.get('isFriendGuard'):
+        defender_side['isFriendGuard'] = True
+    if data.get('isProtect'):
+        defender_side['isProtect'] = True
+    if data.get('isLeechSeed'):
+        defender_side['isLeechSeed'] = True
+    if data.get('isSaltCure'):
+        defender_side['isSaltCure'] = True
+    if data.get('isCharge'):
+        defender_side['isCharge'] = True
+    if data.get('isHelpingHand'):
+        defender_side['isHelpingHand'] = True
+    if data.get('isTailwind'):
+        defender_side['isTailwind'] = True
+    if data.get('isPowerTrick'):
+        defender_side['isPowerTrick'] = True
+    if data.get('isStatBoost'):
+        defender_opts['boosts'] = defender_opts.get('boosts', {})
+        for stat in ['hp', 'atk', 'def', 'spa', 'spd', 'spe']:
+            defender_opts['boosts'][stat] = defender_opts['boosts'].get(stat, 0) + 1
+    if data.get('isSwitching'):
+        defender_side['isSwitching'] = True
+
+    if defender_side:
+        field_opts['defenderSide'] = defender_side
+
+    # Spikes and Stealth Rock
+    if data.get('spikesR'):
+        field_opts['defenderSide'] = field_opts.get('defenderSide', {})
+        field_opts['defenderSide']['spikes'] = int(data['spikesR'])
+
+    if data.get('isStealthRock'):
+        field_opts['defenderSide'] = field_opts.get('defenderSide', {})
+        field_opts['defenderSide']['isSR'] = True
+
+    try:
+        result = min_evs_to_ko(
+            attacker, move, defender,
+            percent=percent,
+            attacker_opts=attacker_opts if attacker_opts else None,
+            defender_evs=defender_evs if defender_evs else None,
+            defender_opts=defender_opts if defender_opts else None,
+            field_opts=field_opts if field_opts else None,
+        )
+
+        if result is None:
+            return jsonify({'success': False, 'message': 'No viable spread found'})
+
+        # min_evs_to_ko returns a single Investment, not a list
+        results = [{
+            'points': result.points,
+            'desc': result.desc,
+            'percent': result.percent,
+            'damage': result.damage,
+        }]
+
         return jsonify({'success': True, 'results': results})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 400
