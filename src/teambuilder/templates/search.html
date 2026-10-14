@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<title>Pok&eacute;mon Search</title>
+		<link rel="icon" type="image/x-icon" href="/static/img/favicon.png" />
+		<link
+			type="text/css"
+			rel="stylesheet"
+			href="/static/js/vendor/select2/select2.css"
+		/>
+		<link type="text/css" rel="stylesheet" href="/static/css/main.css?" />
+		<link
+			type="text/css"
+			rel="stylesheet"
+			href="/static/css/vendor/bootstrap.css"
+		/>
+		<link
+			type="text/css"
+			rel="stylesheet"
+			href="/static/css/dark-theme.css?"
+			id="dark-theme-styles"
+		/>
+		<script
+			type="text/javascript"
+			src="/static/js/theme-init.js"
+		></script>
+		<style>
+			.search-container {
+				display: flex;
+				gap: 20px;
+				padding: 20px;
+			}
+			.search-sidebar {
+				width: 300px;
+				flex-shrink: 0;
+			}
+			.search-results {
+				flex-grow: 1;
+			}
+			.filter-section {
+				margin-bottom: 20px;
+				padding: 15px;
+				background: #2a2a2a;
+				border-radius: 5px;
+			}
+			.filter-section h3 {
+				margin-top: 0;
+				margin-bottom: 10px;
+				font-size: 16px;
+			}
+			.filter-group {
+				margin-bottom: 10px;
+			}
+			.filter-group label {
+				display: block;
+				margin-bottom: 5px;
+				font-size: 14px;
+			}
+			.filter-group input,
+			.filter-group select {
+				width: 100%;
+				padding: 5px;
+				box-sizing: border-box;
+			}
+			.stat-range {
+				display: flex;
+				gap: 10px;
+				align-items: center;
+			}
+			.stat-range input {
+				width: 60px;
+			}
+			.search-btn {
+				width: 100%;
+				padding: 10px;
+				background: #4CAF50;
+				color: white;
+				border: none;
+				border-radius: 5px;
+				cursor: pointer;
+				font-size: 16px;
+			}
+			.search-btn:hover {
+				background: #45a049;
+			}
+			.results-table {
+				width: 100%;
+				border-collapse: collapse;
+				background: #2a2a2a;
+				border-radius: 5px;
+				overflow: hidden;
+			}
+			.results-table th,
+			.results-table td {
+				padding: 10px;
+				text-align: left;
+				border-bottom: 1px solid #444;
+			}
+			.results-table th {
+				background: #333;
+				font-weight: bold;
+			}
+			.results-table tr:hover {
+				background: #3a3a3a;
+			}
+			.type-badge {
+				display: inline-block;
+				padding: 2px 8px;
+				border-radius: 3px;
+				font-size: 12px;
+				margin-right: 2px;
+			}
+			.type-badge:last-child {
+				margin-right: 0;
+			}
+			.results-count {
+				margin-bottom: 10px;
+				font-size: 14px;
+			}
+		</style>
+	</head>
+
+	<body class="dark-theme">
+		<div class="wrapper">
+			<div class="header-section">
+				<span class="title-text main-title-text">Pok&eacute;mon Search</span>
+				<div aria-label="Navigation" role="region">
+					<span class="modeSelection" role="radiogroup">
+						<input
+							class="mode visually-hidden"
+							type="radio"
+							name="page"
+							id="page-calculator"
+						/><label class="btn btn-left btn-wide" for="page-calculator">Calculator</label>
+						<input
+							class="mode visually-hidden"
+							type="radio"
+							name="page"
+							id="page-search"
+							checked="checked"
+						/><label class="btn btn-mid btn-wide" for="page-search">Search</label>
+						<input
+							class="mode visually-hidden"
+							type="radio"
+							name="page"
+							id="page-bulk-ko"
+						/><label class="btn btn-mid btn-wide" for="page-bulk-ko">Bulk KO</label>
+						<input
+							class="mode visually-hidden"
+							type="radio"
+							name="page"
+							id="page-bulk-survive"
+						/><label class="btn btn-right btn-wide" for="page-bulk-survive">Bulk Survive</label>
+					</span>
+				</div>
+			</div>
+			<hr />
+
+			<div class="search-container">
+				<div class="search-sidebar">
+					<div class="filter-section">
+						<h3>Type Filters</h3>
+						<div class="filter-group">
+							<label for="type1">Type 1</label>
+							<select id="type1">
+								<option value="">Any</option>
+								<option value="Normal">Normal</option>
+								<option value="Fire">Fire</option>
+								<option value="Water">Water</option>
+								<option value="Electric">Electric</option>
+								<option value="Grass">Grass</option>
+								<option value="Ice">Ice</option>
+								<option value="Fighting">Fighting</option>
+								<option value="Poison">Poison</option>
+								<option value="Ground">Ground</option>
+								<option value="Flying">Flying</option>
+								<option value="Psychic">Psychic</option>
+								<option value="Bug">Bug</option>
+								<option value="Rock">Rock</option>
+								<option value="Ghost">Ghost</option>
+								<option value="Dragon">Dragon</option>
+								<option value="Dark">Dark</option>
+								<option value="Steel">Steel</option>
+								<option value="Fairy">Fairy</option>
+							</select>
+						</div>
+						<div class="filter-group">
+							<label for="type2">Type 2</label>
+							<select id="type2">
+								<option value="">Any</option>
+								<option value="Normal">Normal</option>
+								<option value="Fire">Fire</option>
+								<option value="Water">Water</option>
+								<option value="Electric">Electric</option>
+								<option value="Grass">Grass</option>
+								<option value="Ice">Ice</option>
+								<option value="Fighting">Fighting</option>
+								<option value="Poison">Poison</option>
+								<option value="Ground">Ground</option>
+								<option value="Flying">Flying</option>
+								<option value="Psychic">Psychic</option>
+								<option value="Bug">Bug</option>
+								<option value="Rock">Rock</option>
+								<option value="Ghost">Ghost</option>
+								<option value="Dragon">Dragon</option>
+								<option value="Dark">Dark</option>
+								<option value="Steel">Steel</option>
+								<option value="Fairy">Fairy</option>
+							</select>
+						</div>
+					</div>
+
+					<div class="filter-section">
+						<h3>Stat Ranges</h3>
+						<div class="filter-group">
+							<label>HP</label>
+							<div class="stat-range">
+								<input type="number" id="hp_min" placeholder="Min" min="0" max="255" />
+								<span>-</span>
+								<input type="number" id="hp_max" placeholder="Max" min="0" max="255" />
+							</div>
+						</div>
+						<div class="filter-group">
+							<label>Attack</label>
+							<div class="stat-range">
+								<input type="number" id="atk_min" placeholder="Min" min="0" max="255" />
+								<span>-</span>
+								<input type="number" id="atk_max" placeholder="Max" min="0" max="255" />
+							</div>
+						</div>
+						<div class="filter-group">
+							<label>Defense</label>
+							<div class="stat-range">
+								<input type="number" id="def_min" placeholder="Min" min="0" max="255" />
+								<span>-</span>
+								<input type="number" id="def_max" placeholder="Max" min="0" max="255" />
+							</div>
+						</div>
+						<div class="filter-group">
+							<label>Sp. Atk</label>
+							<div class="stat-range">
+								<input type="number" id="spa_min" placeholder="Min" min="0" max="255" />
+								<span>-</span>
+								<input type="number" id="spa_max" placeholder="Max" min="0" max="255" />
+							</div>
+						</div>
+						<div class="filter-group">
+							<label>Sp. Def</label>
+							<div class="stat-range">
+								<input type="number" id="spd_min" placeholder="Min" min="0" max="255" />
+								<span>-</span>
+								<input type="number" id="spd_max" placeholder="Max" min="0" max="255" />
+							</div>
+						</div>
+						<div class="filter-group">
+							<label>Speed</label>
+							<div class="stat-range">
+								<input type="number" id="spe_min" placeholder="Min" min="0" max="255" />
+								<span>-</span>
+								<input type="number" id="spe_max" placeholder="Max" min="0" max="255" />
+							</div>
+						</div>
+						<div class="filter-group">
+							<label>BST</label>
+							<div class="stat-range">
+								<input type="number" id="bst_min" placeholder="Min" min="0" max="720" />
+								<span>-</span>
+								<input type="number" id="bst_max" placeholder="Max" min="0" max="720" />
+							</div>
+						</div>
+					</div>
+
+					<div class="filter-section">
+						<h3>Other Filters</h3>
+						<div class="filter-group">
+							<label for="move">Learns Move</label>
+							<select id="move">
+								<option value="">Any</option>
+							</select>
+						</div>
+					</div>
+
+					<button class="search-btn" id="searchBtn">Search</button>
+				</div>
+
+				<div class="search-results">
+					<div class="results-count" id="resultsCount"></div>
+					<table class="results-table">
+						<thead>
+							<tr>
+								<th>Name</th>
+								<th>Type</th>
+								<th>HP</th>
+								<th>Atk</th>
+								<th>Def</th>
+								<th>SpA</th>
+								<th>SpD</th>
+								<th>Spe</th>
+								<th>BST</th>
+							</tr>
+						</thead>
+						<tbody id="resultsBody">
+							<tr>
+								<td colspan="10" style="text-align: center;">Click Search to find Pokemon</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+
+		<script src="/static/js/vendor/jquery-1.9.1.min.js"></script>
+		<script src="/static/js/vendor/select2/select2.min.js"></script>
+		<script src="/static/js/search.js"></script>
+	</body>
+</html>

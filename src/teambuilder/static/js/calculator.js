@@ -4,6 +4,31 @@ $(document).ready(function () {
 	let isLoadingMoveCategory = false; // track if we're loading move category
 	let currentCalculator = "ko"; // "ko" or "survival"
 
+	// Page navigation handlers
+	$('#page-calculator').change(function() {
+		if ($(this).is(':checked')) {
+			// Already on calculator page
+		}
+	});
+
+	$('#page-search').change(function() {
+		if ($(this).is(':checked')) {
+			window.location.href = '/search';
+		}
+	});
+
+	$('#page-bulk-ko').change(function() {
+		if ($(this).is(':checked')) {
+			window.location.href = '/bulk-ko';
+		}
+	});
+
+	$('#page-bulk-survive').change(function() {
+		if ($(this).is(':checked')) {
+			window.location.href = '/bulk-survive';
+		}
+	});
+
 	// Mega stone mapping - shared between attacker and defender
 	const megaStoneMap = {
 		"Dragonite-Mega": "Dragoninite",

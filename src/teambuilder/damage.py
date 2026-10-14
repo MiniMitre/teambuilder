@@ -6,9 +6,9 @@ from typing import NamedTuple
 
 from tqdm import tqdm
 
-from teambuilder.calc import CalcError, build_request, calculate, move_category
+from teambuilder.calc import CalcError, build_request, calculate, move_category, is_super_effective
 from teambuilder.data import DB_PATH
-from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn
+from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn, _query
 
 # Champions gives each stat 0-32 points, so every search below is a scan over
 # 33 candidates in one batch - ~20ms, and damage is monotonic in the invested
@@ -525,18 +525,32 @@ def can_ko_any_atk(
     move_opts: dict | None = None,
     field_opts: dict | None = None,
     db: Path = DB_PATH,
+    only_super_effective: bool = True,
 ) -> DamageFilter:
     """Keeps candidates with any attack that guarantees `percent`% on `defender`.
 
     The cheapest such move wins, and the result records which one it was.
     Slow by construction: every damaging move in the learnset costs two node
     processes, so this is the filter you run last, on a short list.
+
+    If `only_super_effective` is True, only checks moves that are super effective
+    against the defender's types. This significantly speeds up the calculation.
     """
+    # Get defender's types for filtering
+    defender_types_row = _query("SELECT type1, type2 FROM pokemon WHERE name = ?", [defender], db=db)
+    if not defender_types_row:
+        raise ValueError(f"{defender!r} is not in the pokedex")
+    defender_types = [t for t in defender_types_row[0] if t]
+
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         kept = {}
         for name in tqdm(_species_names(candidates), desc=f"Attacks that KO {defender}"):
             cheapest = None
             for move in _damaging_moves(name, db=db):
+                # Filter to only super effective moves if requested
+                if only_super_effective and not is_super_effective(move, defender_types):
+                    continue
+
                 best = most_damaging_ability(
                     name, move, defender,
                     attacker_evs={attacking_stat(move): MAX_STAT_POINTS},

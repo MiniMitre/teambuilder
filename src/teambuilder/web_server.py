@@ -9,6 +9,21 @@ def index():
     """Serve the combined calculator page."""
     return render_template('calculator.html')
 
+@app.route('/search')
+def search_page():
+    """Serve the Pokemon search page."""
+    return render_template('search.html')
+
+@app.route('/bulk-ko')
+def bulk_ko_page():
+    """Serve the bulk KO finder page."""
+    return render_template('bulk_ko.html')
+
+@app.route('/bulk-survive')
+def bulk_survive_page():
+    """Serve the bulk survival finder page."""
+    return render_template('bulk_survive.html')
+
 @app.route('/api/pokemon')
 def get_pokemon():
     """Get list of all pokemon for autocomplete."""
@@ -80,6 +95,37 @@ def get_items():
     ]
     return jsonify(items)
 
+@app.route('/api/moves')
+def get_all_moves():
+    """Get list of all moves."""
+    import duckdb
+    from teambuilder.data import DB_PATH
+    try:
+        with duckdb.connect(DB_PATH, read_only=True) as con:
+            result = con.execute("SELECT DISTINCT move FROM pokemon_moves ORDER BY move").fetchall()
+            moves = [row[0] for row in result]
+            return jsonify(moves)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/abilities')
+def get_all_abilities():
+    """Get list of all abilities."""
+    import duckdb
+    from teambuilder.data import DB_PATH
+    try:
+        with duckdb.connect(DB_PATH, read_only=True) as con:
+            result = con.execute(
+                "SELECT DISTINCT ability1 FROM pokemon WHERE ability1 IS NOT NULL " +
+                "UNION SELECT DISTINCT ability2 FROM pokemon WHERE ability2 IS NOT NULL " +
+                "UNION SELECT DISTINCT ability_hidden FROM pokemon WHERE ability_hidden IS NOT NULL " +
+                "ORDER BY 1"
+            ).fetchall()
+            abilities = [row[0] for row in result]
+            return jsonify(abilities)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/stats/<pokemon>')
 def get_pokemon_stats(pokemon):
     """Get base stats for a specific pokemon."""
@@ -115,6 +161,286 @@ def get_move_category(move):
         return jsonify({'category': None}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/search', methods=['POST'])
+def search_pokemon():
+    """Search Pokemon with filters for type, stats, and move learning."""
+    from teambuilder.pokedex import search
+    from teambuilder.filters import Filter, has_type, has_type1, has_type2, learns, min_stat, max_stat, stat_between
+
+    data = request.json
+
+    # Build filter from request data
+    filters = None
+
+    # Type filter (single or dual type)
+    type1 = data.get('type1')
+    type2 = data.get('type2')
+    if type1:
+        type_filter = has_type1(type1)
+        filters = type_filter if filters is None else filters & type_filter
+    if type2:
+        type_filter = has_type2(type2)
+        filters = type_filter if filters is None else filters & type_filter
+
+    # Stat range filters
+    for stat in ['hp', 'atk', 'def', 'spa', 'spd', 'spe', 'bst']:
+        min_val = data.get(f'{stat}_min')
+        max_val = data.get(f'{stat}_max')
+        if min_val is not None and max_val is not None:
+            stat_filter = stat_between(stat, int(min_val), int(max_val))
+            filters = stat_filter if filters is None else filters & stat_filter
+        elif min_val is not None:
+            stat_filter = min_stat(stat, int(min_val))
+            filters = stat_filter if filters is None else filters & stat_filter
+        elif max_val is not None:
+            stat_filter = max_stat(stat, int(max_val))
+            filters = stat_filter if filters is None else filters & stat_filter
+
+    # Move learning filter
+    move_filter = data.get('move')
+    if move_filter:
+        learn_filter = learns(move_filter)
+        filters = learn_filter if filters is None else filters & learn_filter
+
+    try:
+        results = search(filters, columns="number, name, type1, type2, hp, atk, def, spa, spd, spe, bst")
+        return jsonify({
+            'success': True,
+            'results': [
+                {
+                    'number': row[0],
+                    'name': row[1],
+                    'type1': row[2],
+                    'type2': row[3],
+                    'hp': row[4],
+                    'atk': row[5],
+                    'def': row[6],
+                    'spa': row[7],
+                    'spd': row[8],
+                    'spe': row[9],
+                    'bst': row[10]
+                }
+                for row in results
+            ]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/bulk-ko', methods=['POST'])
+def bulk_ko_finder():
+    """Find which Pokemon can KO a specific defender."""
+    from teambuilder.pokedex import search_names, search
+    from teambuilder.damage import can_ko, can_ko_any_atk
+    from teambuilder.filters import has_type, min_stat
+
+    data = request.json
+
+    defender = data.get('defender')
+    if not defender:
+        return jsonify({'success': False, 'error': 'Defender Pokemon is required'}), 400
+
+    move = data.get('move')  # Optional - if provided, use can_ko
+    percent = data.get('percent', 100.0)
+
+    # Build defender options
+    defender_evs = {}
+    if data.get('defender_hp'):
+        defender_evs['hp'] = int(data['defender_hp'])
+    if data.get('defender_def'):
+        defender_evs['def'] = int(data['defender_def'])
+    if data.get('defender_spd'):
+        defender_evs['spd'] = int(data['defender_spd'])
+
+    defender_opts = {}
+    if data.get('defender_item'):
+        defender_opts['item'] = data['defender_item']
+    if data.get('defender_ability'):
+        defender_opts['ability'] = data['defender_ability']
+
+    # Build attacker options (if any)
+    attacker_opts = {}
+    if data.get('attacker_item'):
+        attacker_opts['item'] = data['attacker_item']
+
+    try:
+        # Get Pokemon names with filters applied
+        filters = None
+
+        # Apply attacker filters to narrow down candidates
+        filter_type1 = data.get('filter_type1')
+        if filter_type1:
+            type_filter = has_type(filter_type1)
+            filters = type_filter if filters is None else filters & type_filter
+
+        filter_min_bst = data.get('filter_min_bst')
+        if filter_min_bst:
+            bst_filter = min_stat('bst', int(filter_min_bst))
+            filters = bst_filter if filters is None else filters & bst_filter
+
+        filter_min_spe = data.get('filter_min_spe')
+        if filter_min_spe:
+            spe_filter = min_stat('spe', int(filter_min_spe))
+            filters = spe_filter if filters is None else filters & spe_filter
+
+        # Get candidates - either filtered or all
+        if filters:
+            filtered_results = search(filters, columns="name")
+            candidates = [row[0] for row in filtered_results]
+        else:
+            candidates = search_names()
+
+        if move:
+            # Use can_ko for specific move
+            results = can_ko(
+                candidates,
+                move,
+                defender,
+                percent=percent,
+                defender_evs=defender_evs if defender_evs else None,
+                defender_opts=defender_opts if defender_opts else None,
+                attacker_opts=attacker_opts if attacker_opts else None
+            )
+        else:
+            # Use can_ko_any_atk to find best move
+            # Only check super effective moves by default for performance
+            only_super_effective = data.get('only_super_effective', True)
+            filter_obj = can_ko_any_atk(
+                defender,
+                percent=percent,
+                defender_evs=defender_evs if defender_evs else None,
+                defender_opts=defender_opts if defender_opts else None,
+                attacker_opts=attacker_opts if attacker_opts else None,
+                only_super_effective=only_super_effective
+            )
+            filter_results = filter_obj.run(candidates)
+            results = {name: inv[0] for name, inv in filter_results.items()}
+
+        # Format results
+        formatted_results = []
+        for name, investment in results.items():
+            formatted_results.append({
+                'name': name,
+                'points': investment.points,
+                'move': investment.move if investment.move else (move if move else 'Best move'),
+                'ability': investment.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in investment.desc else 'Any',
+                'desc': investment.desc
+            })
+
+        return jsonify({
+            'success': True,
+            'results': formatted_results
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/bulk-survive', methods=['POST'])
+def bulk_survive_finder():
+    """Find which Pokemon can survive an attack."""
+    from teambuilder.pokedex import search_names, search
+    from teambuilder.damage import can_survive
+    from teambuilder.filters import has_type, min_stat
+
+    data = request.json
+
+    attacker = data.get('attacker')
+    move = data.get('move')
+    if not attacker or not move:
+        return jsonify({'success': False, 'error': 'Attacker Pokemon and move are required'}), 400
+
+    percent = data.get('percent', 100.0)
+
+    # Build attacker options
+    attacker_evs = {}
+    if data.get('attacker_evs'):
+        attacker_evs_str = data.get('attacker_evs')
+        if isinstance(attacker_evs_str, str):
+            if attacker_evs_str.endswith('+'):
+                ev_value = int(attacker_evs_str[:-1])
+                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
+                attacker_evs[stat] = ev_value
+            elif attacker_evs_str.endswith('-'):
+                ev_value = int(attacker_evs_str[:-1])
+                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
+                attacker_evs[stat] = ev_value
+            else:
+                ev_value = int(attacker_evs_str)
+                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
+                attacker_evs[stat] = ev_value
+
+    attacker_opts = {}
+    if data.get('attacker_item'):
+        attacker_opts['item'] = data['attacker_item']
+    if data.get('attacker_ability'):
+        attacker_opts['ability'] = data['attacker_ability']
+
+    # Build defender options
+    defender_opts = {}
+    if data.get('defender_item'):
+        defender_opts['item'] = data['defender_item']
+    if data.get('defender_ability'):
+        defender_opts['ability'] = data['defender_ability']
+
+    try:
+        # Get Pokemon names with filters applied
+        filters = None
+
+        # Apply defender filters to narrow down candidates
+        filter_type1 = data.get('filter_type1')
+        if filter_type1:
+            type_filter = has_type(filter_type1)
+            filters = type_filter if filters is None else filters & type_filter
+
+        filter_min_bst = data.get('filter_min_bst')
+        if filter_min_bst:
+            bst_filter = min_stat('bst', int(filter_min_bst))
+            filters = bst_filter if filters is None else filters & bst_filter
+
+        filter_min_hp = data.get('filter_min_hp')
+        if filter_min_hp:
+            hp_filter = min_stat('hp', int(filter_min_hp))
+            filters = hp_filter if filters is None else filters & hp_filter
+
+        # Get candidates - either filtered or all
+        if filters:
+            filtered_results = search(filters, columns="name")
+            candidates = [row[0] for row in filtered_results]
+        else:
+            candidates = search_names()
+
+        # Use can_survive
+        results = can_survive(
+            candidates,
+            attacker,
+            move,
+            percent=percent,
+            attacker_evs=attacker_evs if attacker_evs else None,
+            attacker_opts=attacker_opts if attacker_opts else None,
+            defender_opts=defender_opts if defender_opts else None
+        )
+
+        # Format results
+        formatted_results = []
+        for name, investment in results.items():
+            spread = investment.spread if investment.spread else {}
+            hp_invest = spread.get('hp', 0)
+            def_invest = spread.get('def', 0) + spread.get('spd', 0)
+
+            formatted_results.append({
+                'name': name,
+                'points': investment.points,
+                'hp_invest': hp_invest,
+                'def_invest': def_invest,
+                'ability': investment.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in investment.desc else 'Any',
+                'desc': investment.desc
+            })
+
+        return jsonify({
+            'success': True,
+            'results': formatted_results
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/survival', methods=['POST'])
 def calculate_survival():
