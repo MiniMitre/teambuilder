@@ -366,11 +366,52 @@ def bulk_ko_finder_stream():
                     # Send all results at once
                     formatted_results = []
                     for name, investment in results.items():
+                        # Extract ability from description
+                        ability = 'Any'
+                        desc = investment.desc
+                        if ' Atk ' in desc:
+                            atk_index = desc.find(' Atk ')
+                            if atk_index != -1:
+                                after_atk = desc[atk_index + 5:]
+                                parts = after_atk.split()
+
+                                known_multi_word_abilities = {'Huge Power', 'Iron Fist', 'Rock Head', 'Super Luck', 'Wonder Guard',
+                                                               'Pure Power', 'Skill Link', 'Serene Grace', 'Technician', 'Mold Breaker',
+                                                               'Flash Fire', 'Water Absorb', 'Volt Absorb', 'Thick Fat', 'Intimidate',
+                                                               'Overgrow', 'Blaze', 'Torrent', 'Swarm', 'Chlorophyll', 'Swift Swim',
+                                                               'Sand Rush', 'Sand Veil', 'Snow Cloak', 'Rain Dish', 'Forecast',
+                                                               'Trace', 'Pressure', 'Synchronize', 'Levitate', 'Natural Cure',
+                                                               'Insomnia', 'Vital Spirit', 'Soundproof', 'Effect Spore', 'Poison Heal',
+                                                               'Magic Guard', 'Magic Bounce', 'Unaware', 'Contrary', 'Simple',
+                                                               'Unburden', 'Shadow Tag', 'Arena Trap', 'Magnet Pull'}
+
+                                if parts:
+                                    if len(parts) >= 2:
+                                        two_word = f"{parts[0]} {parts[1]}"
+                                        if two_word in known_multi_word_abilities:
+                                            ability = two_word
+                                        else:
+                                            candidate = parts[0]
+                                            if candidate.isdigit():
+                                                ability = 'Any'
+                                            elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
+                                                ability = 'Any'
+                                            else:
+                                                ability = candidate
+                                    else:
+                                        candidate = parts[0]
+                                        if candidate.isdigit():
+                                            ability = 'Any'
+                                        elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
+                                            ability = 'Any'
+                                        else:
+                                            ability = candidate
+
                         formatted_results.append({
                             'name': name,
                             'points': investment.points,
                             'move': investment.move if investment.move else move,
-                            'ability': investment.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in investment.desc else 'Any',
+                            'ability': ability,
                             'desc': investment.desc
                         })
                     q.put({
@@ -545,11 +586,55 @@ def bulk_ko_finder():
         # Format results
         formatted_results = []
         for name, investment in results.items():
+            # Extract ability from description
+            ability = 'Any'
+            desc = investment.desc
+            if ' Atk ' in desc:
+                atk_index = desc.find(' Atk ')
+                if atk_index != -1:
+                    after_atk = desc[atk_index + 5:]
+                    parts = after_atk.split()
+
+                    # Known multi-word abilities
+                    known_multi_word_abilities = {'Huge Power', 'Iron Fist', 'Rock Head', 'Super Luck', 'Wonder Guard',
+                                                   'Pure Power', 'Skill Link', 'Serene Grace', 'Technician', 'Mold Breaker',
+                                                   'Flash Fire', 'Water Absorb', 'Volt Absorb', 'Thick Fat', 'Intimidate',
+                                                   'Overgrow', 'Blaze', 'Torrent', 'Swarm', 'Chlorophyll', 'Swift Swim',
+                                                   'Sand Rush', 'Sand Veil', 'Snow Cloak', 'Rain Dish', 'Forecast',
+                                                   'Trace', 'Pressure', 'Synchronize', 'Levitate', 'Natural Cure',
+                                                   'Insomnia', 'Vital Spirit', 'Soundproof', 'Effect Spore', 'Poison Heal',
+                                                   'Magic Guard', 'Magic Bounce', 'Unaware', 'Contrary', 'Simple',
+                                                   'Unburden', 'Shadow Tag', 'Arena Trap', 'Magnet Pull'}
+
+                    if parts:
+                        # Check for multi-word ability first
+                        if len(parts) >= 2:
+                            two_word = f"{parts[0]} {parts[1]}"
+                            if two_word in known_multi_word_abilities:
+                                ability = two_word
+                            else:
+                                # Single word check
+                                candidate = parts[0]
+                                if candidate.isdigit():
+                                    ability = 'Any'
+                                elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
+                                    ability = 'Any'
+                                else:
+                                    ability = candidate
+                        else:
+                            candidate = parts[0]
+                            if candidate.isdigit():
+                                ability = 'Any'
+                            elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
+                                ability = 'Any'
+                            else:
+                                ability = candidate
+
             formatted_results.append({
                 'name': name,
                 'points': investment.points,
                 'move': investment.move if investment.move else (move if move else 'Best move'),
-                'ability': investment.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in investment.desc else 'Any',
+                'ability': ability,
                 'desc': investment.desc
             })
 

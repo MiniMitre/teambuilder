@@ -201,21 +201,47 @@ _TYPE_CHART = {
 }
 
 
-def is_super_effective(move: str, defender_types: list[str], gen: int = DEFAULT_GEN) -> bool:
+def is_super_effective(
+    move: str,
+    defender_types: list[str],
+    gen: int = DEFAULT_GEN,
+    attacker_ability: str | None = None,
+) -> bool:
     """Check if a move is super effective against the defender's types.
 
-    Returns True if the move is super effective (2x or more) against at least
-    one of the defender's types.
+    Returns True if the move is super effective (2x or more) against the
+    defender's type combination (combined effectiveness of both types).
+
+    If attacker_ability is provided, accounts for type-changing abilities:
+    - Aerialate: Normal moves become Flying
+    - Pixilate: Normal moves become Fairy
+    - Galvanize: Normal moves become Electric
+    - Refrigerate: Normal moves become Ice
+    - Normalize: All moves become Normal
     """
     move_type_name = move_type(move, gen)
     if not move_type_name:
         return False  # Unknown move type, don't filter
 
+    # Apply type-changing abilities
+    if attacker_ability:
+        if attacker_ability == "Aerilate" and move_type_name == "Normal":
+            move_type_name = "Flying"
+        elif attacker_ability == "Pixilate" and move_type_name == "Normal":
+            move_type_name = "Fairy"
+        elif attacker_ability == "Galvanize" and move_type_name == "Normal":
+            move_type_name = "Electric"
+        elif attacker_ability == "Refrigerate" and move_type_name == "Normal":
+            move_type_name = "Ice"
+        elif attacker_ability == "Normalize":
+            move_type_name = "Normal"
+
+    # Calculate combined effectiveness against all defender types
+    combined_effectiveness = 1.0
     for defender_type in defender_types:
         if not defender_type:
             continue
         effectiveness = _TYPE_CHART.get(move_type_name, {}).get(defender_type, 1.0)
-        if effectiveness >= 2.0:
-            return True
+        combined_effectiveness *= effectiveness
 
-    return False
+    return combined_effectiveness >= 2.0

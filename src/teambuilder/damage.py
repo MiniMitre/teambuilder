@@ -10,6 +10,9 @@ from teambuilder.calc import CalcError, build_request, calculate, move_category,
 from teambuilder.data import DB_PATH
 from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn, _query
 
+# Type-changing abilities that modify move types
+_TYPE_CHANGING_ABILITIES = {"Aerilate", "Pixilate", "Galvanize", "Refrigerate", "Normalize"}
+
 # Champions gives each stat 0-32 points, so every search below is a scan over
 # 33 candidates in one batch - ~20ms, and damage is monotonic in the invested
 # stat, so the first spread that clears the bar is the cheapest one.
@@ -554,6 +557,8 @@ def can_ko_any_atk(
 
     If `only_super_effective` is True, only checks moves that are super effective
     against the defender's types. This significantly speeds up the calculation.
+    This check accounts for type-changing abilities (Aerialate, Pixilate, etc.)
+    and properly calculates combined effectiveness against dual-type defenders.
 
     If `progress_callback` is provided, it will be called with (current_name, current_index, total)
     for each candidate processed.
@@ -567,6 +572,45 @@ def can_ko_any_atk(
         raise ValueError(f"{defender!r} is not in the pokedex")
     defender_types = [t for t in defender_types_row[0] if t]
 
+    # Pre-compute which move types are SE against the defender (optimization)
+    # This avoids repeated type chart lookups
+    from teambuilder.calc import _TYPE_CHART
+    se_move_types = set()
+    for move_type in _TYPE_CHART.keys():
+        combined_effectiveness = 1.0
+        for defender_type in defender_types:
+            if not defender_type:
+                continue
+            effectiveness = _TYPE_CHART.get(move_type, {}).get(defender_type, 1.0)
+            combined_effectiveness *= effectiveness
+        if combined_effectiveness >= 2.0:
+            se_move_types.add(move_type)
+
+    # Also pre-compute SE types for type-changing abilities
+    ability_se_types = {}
+    for ability in _TYPE_CHANGING_ABILITIES:
+        # Determine what type this ability changes moves to
+        ability_target_type = None
+        if ability == "Aerilate":
+            ability_target_type = "Flying"
+        elif ability == "Pixilate":
+            ability_target_type = "Fairy"
+        elif ability == "Galvanize":
+            ability_target_type = "Electric"
+        elif ability == "Refrigerate":
+            ability_target_type = "Ice"
+        elif ability == "Normalize":
+            ability_target_type = "Normal"
+
+        if ability_target_type:
+            combined_effectiveness = 1.0
+            for defender_type in defender_types:
+                if not defender_type:
+                    continue
+                effectiveness = _TYPE_CHART.get(ability_target_type, {}).get(defender_type, 1.0)
+                combined_effectiveness *= effectiveness
+            ability_se_types[ability] = combined_effectiveness >= 2.0
+
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         kept = {}
         candidate_list = list(_species_names(candidates))
@@ -577,10 +621,32 @@ def can_ko_any_atk(
             if progress_callback:
                 progress_callback(name, idx + 1, total)
             cheapest = None
+
+            # Get attacker's abilities for type-changing ability check
+            attacker_abilities = get_abilities_for_poke(name, db=db)
+            has_type_changing_ability = any(ability in _TYPE_CHANGING_ABILITIES for ability in attacker_abilities)
+
             for move in _damaging_moves(name, db=db):
                 # Filter to only super effective moves if requested
-                if only_super_effective and not is_super_effective(move, defender_types):
-                    continue
+                if only_super_effective:
+                    # Fast path: check if move type is in pre-computed SE set
+                    from teambuilder.calc import move_type
+                    move_type_name = move_type(move)
+                    if not move_type_name:
+                        continue  # Unknown move type, skip
+
+                    could_be_se = move_type_name in se_move_types
+
+                    # If not SE normally, check if any type-changing ability could make it SE
+                    if not could_be_se and has_type_changing_ability and move_type_name == "Normal":
+                        # Only Normal moves are affected by type-changing abilities
+                        for ability in attacker_abilities:
+                            if ability in _TYPE_CHANGING_ABILITIES and ability_se_types.get(ability, False):
+                                could_be_se = True
+                                break
+
+                    if not could_be_se:
+                        continue
 
                 best = most_damaging_ability(
                     name, move, defender,
@@ -608,11 +674,52 @@ def can_ko_any_atk(
             if cheapest is not None:
                 kept[name] = (cheapest,)
                 if result_callback:
+                    # Extract ability from description
+                    ability = 'Any'
+                    desc = cheapest.desc
+                    if ' Atk ' in desc:
+                        atk_index = desc.find(' Atk ')
+                        if atk_index != -1:
+                            after_atk = desc[atk_index + 5:]
+                            parts = after_atk.split()
+
+                            known_multi_word_abilities = {'Huge Power', 'Iron Fist', 'Rock Head', 'Super Luck', 'Wonder Guard',
+                                                           'Pure Power', 'Skill Link', 'Serene Grace', 'Technician', 'Mold Breaker',
+                                                           'Flash Fire', 'Water Absorb', 'Volt Absorb', 'Thick Fat', 'Intimidate',
+                                                           'Overgrow', 'Blaze', 'Torrent', 'Swarm', 'Chlorophyll', 'Swift Swim',
+                                                           'Sand Rush', 'Sand Veil', 'Snow Cloak', 'Rain Dish', 'Forecast',
+                                                           'Trace', 'Pressure', 'Synchronize', 'Levitate', 'Natural Cure',
+                                                           'Insomnia', 'Vital Spirit', 'Soundproof', 'Effect Spore', 'Poison Heal',
+                                                           'Magic Guard', 'Magic Bounce', 'Unaware', 'Contrary', 'Simple',
+                                                           'Unburden', 'Shadow Tag', 'Arena Trap', 'Magnet Pull'}
+
+                            if parts:
+                                if len(parts) >= 2:
+                                    two_word = f"{parts[0]} {parts[1]}"
+                                    if two_word in known_multi_word_abilities:
+                                        ability = two_word
+                                    else:
+                                        candidate = parts[0]
+                                        if candidate.isdigit():
+                                            ability = 'Any'
+                                        elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
+                                            ability = 'Any'
+                                        else:
+                                            ability = candidate
+                                else:
+                                    candidate = parts[0]
+                                    if candidate.isdigit():
+                                        ability = 'Any'
+                                    elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
+                                        ability = 'Any'
+                                    else:
+                                        ability = candidate
+
                     result_callback({
                         'name': name,
                         'points': cheapest.points,
                         'move': cheapest.move if cheapest.move else 'Best move',
-                        'ability': cheapest.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in cheapest.desc else 'Any',
+                        'ability': ability,
                         'desc': cheapest.desc
                     })
         return kept
