@@ -6,12 +6,11 @@ from typing import NamedTuple
 
 from tqdm import tqdm
 
-from teambuilder.calc import CalcError, build_request, calculate, move_category, is_super_effective
+from teambuilder.calc import (
+    TYPE_CHANGING_ABILITIES, CalcError, build_request, calculate, move_category, is_super_effective,
+)
 from teambuilder.data import DB_PATH
 from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn, _query
-
-# Type-changing abilities that modify move types
-_TYPE_CHANGING_ABILITIES = {"Aerilate", "Pixilate", "Galvanize", "Refrigerate", "Normalize"}
 
 # Champions gives each stat 0-32 points, so every search below is a scan over
 # 33 candidates in one batch - ~20ms, and damage is monotonic in the invested
@@ -602,20 +601,7 @@ def can_ko_any_atk(
 
     # Also pre-compute SE types for type-changing abilities
     ability_se_types = {}
-    for ability in _TYPE_CHANGING_ABILITIES:
-        # Determine what type this ability changes moves to
-        ability_target_type = None
-        if ability == "Aerilate":
-            ability_target_type = "Flying"
-        elif ability == "Pixilate":
-            ability_target_type = "Fairy"
-        elif ability == "Galvanize":
-            ability_target_type = "Electric"
-        elif ability == "Refrigerate":
-            ability_target_type = "Ice"
-        elif ability == "Normalize":
-            ability_target_type = "Normal"
-
+    for ability, ability_target_type in TYPE_CHANGING_ABILITIES.items():
         if ability_target_type:
             combined_effectiveness = 1.0
             for defender_type in defender_types:
@@ -638,7 +624,7 @@ def can_ko_any_atk(
 
             # Get attacker's abilities for type-changing ability check
             attacker_abilities = get_abilities_for_poke(name, db=db)
-            has_type_changing_ability = any(ability in _TYPE_CHANGING_ABILITIES for ability in attacker_abilities)
+            has_type_changing_ability = any(ability in TYPE_CHANGING_ABILITIES for ability in attacker_abilities)
 
             for move in _damaging_moves(name, db=db):
                 # Filter to only super effective moves if requested
@@ -655,7 +641,7 @@ def can_ko_any_atk(
                     if not could_be_se and has_type_changing_ability and move_type_name == "Normal":
                         # Only Normal moves are affected by type-changing abilities
                         for ability in attacker_abilities:
-                            if ability in _TYPE_CHANGING_ABILITIES and ability_se_types.get(ability, False):
+                            if ability in TYPE_CHANGING_ABILITIES and ability_se_types.get(ability, False):
                                 could_be_se = True
                                 break
 

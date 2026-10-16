@@ -249,6 +249,20 @@ _TYPE_CHART = {
 }
 
 
+# What each type-changing ability turns a move into. Normalize changes every
+# move; the rest only change Normal ones. Dragonize is Champions' own, on
+# Feraligatr-Mega. One table, so a new -ate ability cannot be added to one
+# check and missed by the other.
+TYPE_CHANGING_ABILITIES = {
+    "Aerilate": "Flying",
+    "Pixilate": "Fairy",
+    "Galvanize": "Electric",
+    "Refrigerate": "Ice",
+    "Dragonize": "Dragon",
+    "Normalize": "Normal",
+}
+
+
 def is_super_effective(
     move: str,
     defender_types: list[str],
@@ -265,6 +279,7 @@ def is_super_effective(
     - Pixilate: Normal moves become Fairy
     - Galvanize: Normal moves become Electric
     - Refrigerate: Normal moves become Ice
+    - Dragonize: Normal moves become Dragon
     - Normalize: All moves become Normal
     """
     move_type_name = move_type(move, gen)
@@ -272,17 +287,10 @@ def is_super_effective(
         return False  # Unknown move type, don't filter
 
     # Apply type-changing abilities
-    if attacker_ability:
-        if attacker_ability == "Aerilate" and move_type_name == "Normal":
-            move_type_name = "Flying"
-        elif attacker_ability == "Pixilate" and move_type_name == "Normal":
-            move_type_name = "Fairy"
-        elif attacker_ability == "Galvanize" and move_type_name == "Normal":
-            move_type_name = "Electric"
-        elif attacker_ability == "Refrigerate" and move_type_name == "Normal":
-            move_type_name = "Ice"
-        elif attacker_ability == "Normalize":
-            move_type_name = "Normal"
+    if attacker_ability in TYPE_CHANGING_ABILITIES and (
+        move_type_name == "Normal" or attacker_ability == "Normalize"
+    ):
+        move_type_name = TYPE_CHANGING_ABILITIES[attacker_ability]
 
     # Calculate combined effectiveness against all defender types
     combined_effectiveness = 1.0
