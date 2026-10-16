@@ -38,10 +38,16 @@ $(document).ready(function() {
         width: '100%'
     });
 
-    // Initialize Select2 for defender ability (optional field)
-    $('#defender_ability').append('<option value="">Any</option>');
-    $('#defender_ability').select2({
-        placeholder: 'Select Ability',
+    // Ability filter: keeps only the defenders that can have the ability.
+    // Which of its abilities each one survives with is the calculation's call.
+    $('#filter_ability').append('<option value="">Any</option>');
+    $.get('/api/abilities', function(data) {
+        data.forEach(function(ability) {
+            $('#filter_ability').append('<option value="' + ability + '">' + ability + '</option>');
+        });
+    });
+    $('#filter_ability').select2({
+        placeholder: 'Any',
         allowClear: true,
         width: '100%'
     });
@@ -141,10 +147,10 @@ $(document).ready(function() {
                 attacker_evs: $('#attacker_evs').val() || '32',
                 attacker_stat: attackerStat,
                 defender_item: $('#defender_item').val() || null,
-                defender_ability: $('#defender_ability').val() || null,
                 percent: $('#survival_percent').val() ? parseFloat($('#survival_percent').val()) : 100.0,
                 // Defender filters
                 filter_type1: $('#filter_type1').val() || null,
+                filter_ability: $('#filter_ability').val() || null,
                 filter_min_bst: $('#filter_min_bst').val() ? parseInt($('#filter_min_bst').val()) : null,
                 filter_min_hp: $('#filter_min_hp').val() ? parseInt($('#filter_min_hp').val()) : null
             };

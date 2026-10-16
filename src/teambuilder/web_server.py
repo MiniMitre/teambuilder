@@ -366,46 +366,7 @@ def bulk_ko_finder_stream():
                     # Send all results at once
                     formatted_results = []
                     for name, investment in results.items():
-                        # Extract ability from description
-                        ability = 'Any'
-                        desc = investment.desc
-                        if ' Atk ' in desc:
-                            atk_index = desc.find(' Atk ')
-                            if atk_index != -1:
-                                after_atk = desc[atk_index + 5:]
-                                parts = after_atk.split()
-
-                                known_multi_word_abilities = {'Huge Power', 'Iron Fist', 'Rock Head', 'Super Luck', 'Wonder Guard',
-                                                               'Pure Power', 'Skill Link', 'Serene Grace', 'Technician', 'Mold Breaker',
-                                                               'Flash Fire', 'Water Absorb', 'Volt Absorb', 'Thick Fat', 'Intimidate',
-                                                               'Overgrow', 'Blaze', 'Torrent', 'Swarm', 'Chlorophyll', 'Swift Swim',
-                                                               'Sand Rush', 'Sand Veil', 'Snow Cloak', 'Rain Dish', 'Forecast',
-                                                               'Trace', 'Pressure', 'Synchronize', 'Levitate', 'Natural Cure',
-                                                               'Insomnia', 'Vital Spirit', 'Soundproof', 'Effect Spore', 'Poison Heal',
-                                                               'Magic Guard', 'Magic Bounce', 'Unaware', 'Contrary', 'Simple',
-                                                               'Unburden', 'Shadow Tag', 'Arena Trap', 'Magnet Pull'}
-
-                                if parts:
-                                    if len(parts) >= 2:
-                                        two_word = f"{parts[0]} {parts[1]}"
-                                        if two_word in known_multi_word_abilities:
-                                            ability = two_word
-                                        else:
-                                            candidate = parts[0]
-                                            if candidate.isdigit():
-                                                ability = 'Any'
-                                            elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
-                                                ability = 'Any'
-                                            else:
-                                                ability = candidate
-                                    else:
-                                        candidate = parts[0]
-                                        if candidate.isdigit():
-                                            ability = 'Any'
-                                        elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
-                                            ability = 'Any'
-                                        else:
-                                            ability = candidate
+                        ability = investment.ability or 'Any'
 
                         formatted_results.append({
                             'name': name,
@@ -586,49 +547,7 @@ def bulk_ko_finder():
         # Format results
         formatted_results = []
         for name, investment in results.items():
-            # Extract ability from description
-            ability = 'Any'
-            desc = investment.desc
-            if ' Atk ' in desc:
-                atk_index = desc.find(' Atk ')
-                if atk_index != -1:
-                    after_atk = desc[atk_index + 5:]
-                    parts = after_atk.split()
-
-                    # Known multi-word abilities
-                    known_multi_word_abilities = {'Huge Power', 'Iron Fist', 'Rock Head', 'Super Luck', 'Wonder Guard',
-                                                   'Pure Power', 'Skill Link', 'Serene Grace', 'Technician', 'Mold Breaker',
-                                                   'Flash Fire', 'Water Absorb', 'Volt Absorb', 'Thick Fat', 'Intimidate',
-                                                   'Overgrow', 'Blaze', 'Torrent', 'Swarm', 'Chlorophyll', 'Swift Swim',
-                                                   'Sand Rush', 'Sand Veil', 'Snow Cloak', 'Rain Dish', 'Forecast',
-                                                   'Trace', 'Pressure', 'Synchronize', 'Levitate', 'Natural Cure',
-                                                   'Insomnia', 'Vital Spirit', 'Soundproof', 'Effect Spore', 'Poison Heal',
-                                                   'Magic Guard', 'Magic Bounce', 'Unaware', 'Contrary', 'Simple',
-                                                   'Unburden', 'Shadow Tag', 'Arena Trap', 'Magnet Pull'}
-
-                    if parts:
-                        # Check for multi-word ability first
-                        if len(parts) >= 2:
-                            two_word = f"{parts[0]} {parts[1]}"
-                            if two_word in known_multi_word_abilities:
-                                ability = two_word
-                            else:
-                                # Single word check
-                                candidate = parts[0]
-                                if candidate.isdigit():
-                                    ability = 'Any'
-                                elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
-                                    ability = 'Any'
-                                else:
-                                    ability = candidate
-                        else:
-                            candidate = parts[0]
-                            if candidate.isdigit():
-                                ability = 'Any'
-                            elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
-                                ability = 'Any'
-                            else:
-                                ability = candidate
+            ability = investment.ability or 'Any'
 
             formatted_results.append({
                 'name': name,
@@ -649,8 +568,8 @@ def bulk_ko_finder():
 def bulk_survive_finder():
     """Find which Pokemon can survive an attack."""
     from teambuilder.pokedex import search_names, search
-    from teambuilder.damage import can_survive
-    from teambuilder.filters import has_type, min_stat
+    from teambuilder.damage import attacking_stat, can_survive
+    from teambuilder.filters import ability as can_have_ability, has_type, min_stat
 
     data = request.json
 
@@ -661,25 +580,23 @@ def bulk_survive_finder():
 
     percent = data.get('percent', 100.0)
 
-    # Build attacker options
+    # "32", "32+" or "32-": points in the stat the move attacks with, and for
+    # + or - a nature that raises or lowers it - the same reading
+    # min_evs_to_survive gives these strings.
     attacker_evs = {}
-    if data.get('attacker_evs'):
-        attacker_evs_str = data.get('attacker_evs')
-        if isinstance(attacker_evs_str, str):
-            if attacker_evs_str.endswith('+'):
-                ev_value = int(attacker_evs_str[:-1])
-                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
-                attacker_evs[stat] = ev_value
-            elif attacker_evs_str.endswith('-'):
-                ev_value = int(attacker_evs_str[:-1])
-                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
-                attacker_evs[stat] = ev_value
-            else:
-                ev_value = int(attacker_evs_str)
-                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
-                attacker_evs[stat] = ev_value
-
     attacker_opts = {}
+    evs_text = str(data.get('attacker_evs') or '').strip()
+    if evs_text:
+        stat = attacking_stat(move)
+        try:
+            attacker_evs[stat] = int(evs_text.rstrip('+-'))
+        except ValueError:
+            return jsonify({'success': False, 'error': f'Attacking stat investment must look like 32, 32+ or 32-, got {evs_text!r}'}), 400
+        if evs_text.endswith('+'):
+            attacker_opts['nature'] = 'Adamant' if stat == 'atk' else 'Modest'
+        elif evs_text.endswith('-'):
+            attacker_opts['nature'] = 'Modest' if stat == 'atk' else 'Adamant'
+
     if data.get('attacker_item'):
         attacker_opts['item'] = data['attacker_item']
     if data.get('attacker_ability'):
@@ -689,8 +606,8 @@ def bulk_survive_finder():
     defender_opts = {}
     if data.get('defender_item'):
         defender_opts['item'] = data['defender_item']
-    if data.get('defender_ability'):
-        defender_opts['ability'] = data['defender_ability']
+    # No defender ability: one ability across a roster means nothing, and
+    # survive_filter picks each defender's own. Filter by it below instead.
 
     try:
         # Get Pokemon names with filters applied
@@ -701,6 +618,11 @@ def bulk_survive_finder():
         if filter_type1:
             type_filter = has_type(filter_type1)
             filters = type_filter if filters is None else filters & type_filter
+
+        filter_ability = data.get('filter_ability')
+        if filter_ability:
+            ability_filter = can_have_ability(filter_ability)
+            filters = ability_filter if filters is None else filters & ability_filter
 
         filter_min_bst = data.get('filter_min_bst')
         if filter_min_bst:
@@ -742,7 +664,7 @@ def bulk_survive_finder():
                 'points': investment.points,
                 'hp_invest': hp_invest,
                 'def_invest': def_invest,
-                'ability': investment.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in investment.desc else 'Any',
+                'ability': investment.ability or 'Any',
                 'desc': investment.desc
             })
 

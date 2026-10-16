@@ -6,12 +6,11 @@ from typing import NamedTuple
 
 from tqdm import tqdm
 
-from teambuilder.calc import CalcError, build_request, calculate, move_category, is_super_effective
+from teambuilder.calc import (
+    TYPE_CHANGING_ABILITIES, CalcError, build_request, calculate, move_category, is_super_effective,
+)
 from teambuilder.data import DB_PATH
 from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn, _query
-
-# Type-changing abilities that modify move types
-_TYPE_CHANGING_ABILITIES = {"Aerilate", "Pixilate", "Galvanize", "Refrigerate", "Normalize"}
 
 # Champions gives each stat 0-32 points, so every search below is a scan over
 # 33 candidates in one batch - ~20ms, and damage is monotonic in the invested
@@ -26,6 +25,7 @@ class Investment(NamedTuple):
     user_hp: int
     move: str | None = None        # set when the filter picked the move, not the caller
     spread: dict[str, int] | None = None  # set when the points cover more than one stat
+    ability: str | None = None     # set when the filter picked it; None if none of them mattered
 
     def __str__(self):
         with_move = f" with {self.move}" if self.move else ""
@@ -182,6 +182,19 @@ def verify_Min_EVs (
     for pair in minPairs
     ]
     return _all(requests, points=[sum(pair.values()) for pair in minPairs])
+
+def _chosen_ability(best: BestAbility, subject: str, db: Path) -> str | None:
+    """What a filter's ability pick is worth reporting: the tied names, or None
+    when `subject` had a choice and every ability it has came out the same.
+
+    A pokemon with one ability always names it - most megas - since "any" would
+    read as wrong next to an ability filter that just asked for that one.
+    """
+    abilities = get_abilities_for_poke(subject, db=db)
+    if len(abilities) > 1 and len(best.names) == len(abilities):
+        return None
+    return " / ".join(best.names)
+
 
 def _ability_scan(attacker: str, move: str, defender: str, *, vary: str, pick, options: dict):
     """Calculate this matchup once per ability of one side, and pick an extreme.
@@ -527,7 +540,7 @@ def ko_filter(
                 defender_side=defender_side, attacker_side=attacker_side,
             )
             if investment is not None:
-                kept[name] = (investment,)
+                kept[name] = (investment._replace(ability=_chosen_ability(best, name, db)),)
         return kept
 
     threshold = "KOes" if percent == 100.0 else f"deals {percent}% to"
@@ -588,20 +601,7 @@ def can_ko_any_atk(
 
     # Also pre-compute SE types for type-changing abilities
     ability_se_types = {}
-    for ability in _TYPE_CHANGING_ABILITIES:
-        # Determine what type this ability changes moves to
-        ability_target_type = None
-        if ability == "Aerilate":
-            ability_target_type = "Flying"
-        elif ability == "Pixilate":
-            ability_target_type = "Fairy"
-        elif ability == "Galvanize":
-            ability_target_type = "Electric"
-        elif ability == "Refrigerate":
-            ability_target_type = "Ice"
-        elif ability == "Normalize":
-            ability_target_type = "Normal"
-
+    for ability, ability_target_type in TYPE_CHANGING_ABILITIES.items():
         if ability_target_type:
             combined_effectiveness = 1.0
             for defender_type in defender_types:
@@ -624,7 +624,7 @@ def can_ko_any_atk(
 
             # Get attacker's abilities for type-changing ability check
             attacker_abilities = get_abilities_for_poke(name, db=db)
-            has_type_changing_ability = any(ability in _TYPE_CHANGING_ABILITIES for ability in attacker_abilities)
+            has_type_changing_ability = any(ability in TYPE_CHANGING_ABILITIES for ability in attacker_abilities)
 
             for move in _damaging_moves(name, db=db):
                 # Filter to only super effective moves if requested
@@ -641,7 +641,7 @@ def can_ko_any_atk(
                     if not could_be_se and has_type_changing_ability and move_type_name == "Normal":
                         # Only Normal moves are affected by type-changing abilities
                         for ability in attacker_abilities:
-                            if ability in _TYPE_CHANGING_ABILITIES and ability_se_types.get(ability, False):
+                            if ability in TYPE_CHANGING_ABILITIES and ability_se_types.get(ability, False):
                                 could_be_se = True
                                 break
 
@@ -666,7 +666,7 @@ def can_ko_any_atk(
                 )
                 if investment is None:
                     continue
-                investment = investment._replace(move=move)
+                investment = investment._replace(move=move, ability=_chosen_ability(best, name, db))
                 if cheapest is None or investment.points < cheapest.points:
                     cheapest = investment
                 if cheapest.points == 0:
@@ -674,46 +674,7 @@ def can_ko_any_atk(
             if cheapest is not None:
                 kept[name] = (cheapest,)
                 if result_callback:
-                    # Extract ability from description
-                    ability = 'Any'
-                    desc = cheapest.desc
-                    if ' Atk ' in desc:
-                        atk_index = desc.find(' Atk ')
-                        if atk_index != -1:
-                            after_atk = desc[atk_index + 5:]
-                            parts = after_atk.split()
-
-                            known_multi_word_abilities = {'Huge Power', 'Iron Fist', 'Rock Head', 'Super Luck', 'Wonder Guard',
-                                                           'Pure Power', 'Skill Link', 'Serene Grace', 'Technician', 'Mold Breaker',
-                                                           'Flash Fire', 'Water Absorb', 'Volt Absorb', 'Thick Fat', 'Intimidate',
-                                                           'Overgrow', 'Blaze', 'Torrent', 'Swarm', 'Chlorophyll', 'Swift Swim',
-                                                           'Sand Rush', 'Sand Veil', 'Snow Cloak', 'Rain Dish', 'Forecast',
-                                                           'Trace', 'Pressure', 'Synchronize', 'Levitate', 'Natural Cure',
-                                                           'Insomnia', 'Vital Spirit', 'Soundproof', 'Effect Spore', 'Poison Heal',
-                                                           'Magic Guard', 'Magic Bounce', 'Unaware', 'Contrary', 'Simple',
-                                                           'Unburden', 'Shadow Tag', 'Arena Trap', 'Magnet Pull'}
-
-                            if parts:
-                                if len(parts) >= 2:
-                                    two_word = f"{parts[0]} {parts[1]}"
-                                    if two_word in known_multi_word_abilities:
-                                        ability = two_word
-                                    else:
-                                        candidate = parts[0]
-                                        if candidate.isdigit():
-                                            ability = 'Any'
-                                        elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
-                                            ability = 'Any'
-                                        else:
-                                            ability = candidate
-                                else:
-                                    candidate = parts[0]
-                                    if candidate.isdigit():
-                                        ability = 'Any'
-                                    elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
-                                        ability = 'Any'
-                                    else:
-                                        ability = candidate
+                    ability = cheapest.ability or 'Any'
 
                     result_callback({
                         'name': name,
@@ -780,15 +741,16 @@ def survive_filter(
                 defender_opts=defender_opts,
                 move_opts=move_opts, field_opts=field_opts,
             )
-            investment = min_evs_to_survive(
+            spreads = min_evs_to_survive(
                 attacker, move, name,
                 percent=percent,
                 attacker_evs=attacker_evs, attacker_opts=attacker_opts,
                 defender_opts={**(defender_opts or {}), "ability": best.names[0]},
                 move_opts=move_opts, field_opts=field_opts,
             )
-            if investment is not None:
-                kept[name] = (investment,)
+            # Every tied spread comes back, cheapest first; one answers the filter.
+            if spreads:
+                kept[name] = (spreads[0]._replace(ability=_chosen_ability(best, name, db)),)
         return kept
 
     threshold = "survives" if percent == 100.0 else f"takes under {percent}% from"
