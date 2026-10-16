@@ -1,9 +1,12 @@
 {
   description = "Pokemon Champions team building: pokedex search and damage calculation";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    deploy-rs.url = "github:serokell/deploy-rs";
+  };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, deploy-rs }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
@@ -112,5 +115,49 @@
             meta.description = "The teambuilder command line: find, ko, survive, calc";
           };
         });
+
+      # `nix run github:serokell/deploy-rs -- .#ubuntu` builds here and copies the
+      # result over SSH, as root, to an Ubuntu server with Nix. `vps` is a Host in
+      # ~/.ssh/config, which keeps the server's address out of the repository.
+      # Ubuntu has no NixOS activation, so the profile's own script installs the
+      # systemd unit - which points at this exact build - and restarts it. If the
+      # deploy cuts off SSH, the server rolls back to the previous generation by
+      # itself.
+      deploy.nodes.ubuntu =
+        let
+          pkgs = nixpkgs.legacyPackages.x86_64-linux;
+          web = self.packages.x86_64-linux.web;
+          unit = pkgs.writeText "teambuilder.service" ''
+            [Unit]
+            Description=teambuilder web app
+            After=network-online.target
+            Wants=network-online.target
+
+            [Service]
+            User=teambuilder
+            Environment=TEAMBUILDER_BIND=127.0.0.1:8000
+            ExecStart=${web}/bin/teambuilder-web
+            Restart=on-failure
+
+            [Install]
+            WantedBy=multi-user.target
+          '';
+        in
+        {
+          hostname = "vps";
+          sshUser = "root";
+          profiles.teambuilder = {
+            user = "root";
+            path = deploy-rs.lib.x86_64-linux.activate.custom web ''
+              id teambuilder >/dev/null 2>&1 || useradd --system --no-create-home teambuilder
+              install -m644 ${unit} /etc/systemd/system/teambuilder.service
+              systemctl daemon-reload
+              systemctl enable teambuilder
+              systemctl restart teambuilder
+            '';
+          };
+        };
+
+      checks = builtins.mapAttrs (system: deployLib: deployLib.deployChecks self.deploy) deploy-rs.lib;
     };
 }
