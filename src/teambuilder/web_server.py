@@ -569,7 +569,7 @@ def bulk_survive_finder():
     """Find which Pokemon can survive an attack."""
     from teambuilder.pokedex import search_names, search
     from teambuilder.damage import attacking_stat, can_survive
-    from teambuilder.filters import has_type, min_stat
+    from teambuilder.filters import ability as can_have_ability, has_type, min_stat
 
     data = request.json
 
@@ -606,8 +606,8 @@ def bulk_survive_finder():
     defender_opts = {}
     if data.get('defender_item'):
         defender_opts['item'] = data['defender_item']
-    if data.get('defender_ability'):
-        defender_opts['ability'] = data['defender_ability']
+    # No defender ability: one ability across a roster means nothing, and
+    # survive_filter picks each defender's own. Filter by it below instead.
 
     try:
         # Get Pokemon names with filters applied
@@ -618,6 +618,11 @@ def bulk_survive_finder():
         if filter_type1:
             type_filter = has_type(filter_type1)
             filters = type_filter if filters is None else filters & type_filter
+
+        filter_ability = data.get('filter_ability')
+        if filter_ability:
+            ability_filter = can_have_ability(filter_ability)
+            filters = ability_filter if filters is None else filters & ability_filter
 
         filter_min_bst = data.get('filter_min_bst')
         if filter_min_bst:
