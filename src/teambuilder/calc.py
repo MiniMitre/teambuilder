@@ -2,6 +2,7 @@
 import json
 import re
 import subprocess
+import threading
 from functools import cache
 from pathlib import Path
 
@@ -59,8 +60,11 @@ def calculate(request: dict | list[dict]) -> dict | list[dict]:
     single request returns a single response, and raises CalcError instead.
     """
     batch = request if isinstance(request, list) else [request]
-    stdout = _node([str(CALC_JS)], "\n".join(json.dumps(r) for r in batch))
-    responses = [json.loads(line) for line in stdout.splitlines() if line.strip()]
+    lines = [json.dumps(r) for r in batch]
+    responses = _served(lines)
+    if responses is None:
+        stdout = _node([str(CALC_JS)], "\n".join(lines))
+        responses = [json.loads(line) for line in stdout.splitlines() if line.strip()]
 
     if isinstance(request, list):
         return responses
@@ -156,6 +160,50 @@ def _categories(gen: int) -> dict[str, str | None]:
 @cache
 def _move_types(gen: int) -> dict[str, str | None]:
     return json.loads(_node(["-e", _TYPE_DUMP, str(gen)]))
+
+
+# Starting node costs about 100 ms and a calculation about 0.1 ms, so the slow
+# filters - two batches per candidate and move - spent nearly all their time on
+# startup. One `calc.js --serve` process is kept for every batch instead. The
+# lock is for the web server, whose requests run on threads of their own.
+_server: subprocess.Popen | None = None
+_server_lock = threading.Lock()
+
+
+def _served(lines: list[str]) -> list[dict] | None:
+    """Responses from the long-lived calc.js, or None if it is not answering.
+
+    Lines go one at a time, each answer read before the next is sent: a whole
+    batch written up front would fill the pipe back while nobody reads it, and
+    both sides would wait on each other. None leaves the batch to a one-off
+    process, which runs it the old way and reports node's own error if there
+    is one - the next batch starts a fresh server.
+    """
+    global _server
+    with _server_lock:
+        try:
+            if _server is None or _server.poll() is not None:
+                # stderr is the library's chatter (see calc.js); nothing reads
+                # it, so it cannot be a pipe that fills up and blocks node.
+                _server = subprocess.Popen(
+                    ["node", str(CALC_JS), "--serve"], cwd=ROOT, text=True,
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
+            responses = []
+            for line in lines:
+                _server.stdin.write(line + "\n")
+                _server.stdin.flush()
+                answer = _server.stdout.readline()
+                if not answer:
+                    raise BrokenPipeError
+                responses.append(json.loads(answer))
+            return responses
+        except (OSError, ValueError):
+            if _server is not None:
+                _server.kill()
+            _server = None
+            return None
 
 
 def _node(args: list[str], stdin: str = "") -> str:
