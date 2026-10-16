@@ -780,15 +780,16 @@ def survive_filter(
                 defender_opts=defender_opts,
                 move_opts=move_opts, field_opts=field_opts,
             )
-            investment = min_evs_to_survive(
+            spreads = min_evs_to_survive(
                 attacker, move, name,
                 percent=percent,
                 attacker_evs=attacker_evs, attacker_opts=attacker_opts,
                 defender_opts={**(defender_opts or {}), "ability": best.names[0]},
                 move_opts=move_opts, field_opts=field_opts,
             )
-            if investment is not None:
-                kept[name] = (investment,)
+            # Every tied spread comes back, cheapest first; one answers the filter.
+            if spreads:
+                kept[name] = (spreads[0],)
         return kept
 
     threshold = "survives" if percent == 100.0 else f"takes under {percent}% from"
