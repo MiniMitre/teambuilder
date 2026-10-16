@@ -46,6 +46,12 @@ class Filter:
 def has_type(type_: str) -> Filter:
     return Filter("? IN (p.type1, coalesce(p.type2, p.type1))", f"Is of type: {type_}",  (type_,))
 
+def has_type1(type_: str) -> Filter:
+    return Filter("p.type1 = ?", f"Type 1 is: {type_}", (type_,))
+
+def has_type2(type_: str) -> Filter:
+    return Filter("p.type2 = ?", f"Type 2 is: {type_}", (type_,))
+
 def learns(move: str) -> Filter:
     return Filter("EXISTS (SELECT 1 FROM pokemon_moves m WHERE m.pokemon = p.name AND m.move=? )", f"Learns: {move}",  (move,))
 

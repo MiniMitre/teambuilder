@@ -22,6 +22,15 @@ for (const move of gen.moves) categories[move.id] = move.category || null;
 console.log(JSON.stringify(categories));
 """
 
+# Similarly dump move types for type effectiveness filtering
+_TYPE_DUMP = """
+const {Generations} = require('@smogon/calc');
+const gen = Generations.get(Number(process.argv[1]));
+const types = {};
+for (const move of gen.moves) types[move.id] = move.type || null;
+console.log(JSON.stringify(types));
+"""
+
 
 class CalcError(RuntimeError):
     """A request the calculator refused, or a node process that failed."""
@@ -35,6 +44,11 @@ def move_category(move: str, gen: int = DEFAULT_GEN) -> str | None:
     "Status" rather than treating every unknown as a non-attacking move.
     """
     return _categories(gen).get(_to_id(move))
+
+
+def move_type(move: str, gen: int = DEFAULT_GEN) -> str | None:
+    """The type of a move, or None if the move is not in `gen`."""
+    return _move_types(gen).get(_to_id(move))
 
 
 def calculate(request: dict | list[dict]) -> dict | list[dict]:
@@ -96,6 +110,8 @@ def build_request(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
     gen: int = DEFAULT_GEN,
     request_id=None,
 ) -> dict:
@@ -118,6 +134,13 @@ def build_request(
         # Champions is played in doubles.
         "field": {"gameType": "Doubles", **(field_opts or {})},
     }
+
+    # Add side conditions if provided
+    if defender_side:
+        request["defenderSide"] = defender_side
+    if attacker_side:
+        request["attackerSide"] = attacker_side
+
     # Only worth sending when there is one: calc.js echoes it back, which is
     # how a response is matched to its request in a batch.
     if request_id is not None:
@@ -128,6 +151,11 @@ def build_request(
 @cache
 def _categories(gen: int) -> dict[str, str | None]:
     return json.loads(_node(["-e", _CATEGORY_DUMP, str(gen)]))
+
+
+@cache
+def _move_types(gen: int) -> dict[str, str | None]:
+    return json.loads(_node(["-e", _TYPE_DUMP, str(gen)]))
 
 
 def _node(args: list[str], stdin: str = "") -> str:
@@ -147,3 +175,73 @@ def _to_id(name: str) -> str:
     # The library keys its data by id: "Grassy Glide" is grassyglide, and
     # "Farfetch'd" (with either apostrophe) is farfetchd.
     return re.sub(r"[^a-z0-9]+", "", name.lower())
+
+
+# Type effectiveness chart for Champions (same as standard Pokemon type chart)
+# Values: 2.0 = super effective, 0.5 = not very effective, 0.0 = immune, 1.0 = neutral
+_TYPE_CHART = {
+    "Normal": {"Rock": 0.5, "Ghost": 0.0, "Steel": 0.5},
+    "Fire": {"Fire": 0.5, "Water": 0.5, "Grass": 2.0, "Ice": 2.0, "Bug": 2.0, "Rock": 0.5, "Dragon": 0.5, "Steel": 2.0},
+    "Water": {"Fire": 2.0, "Water": 0.5, "Grass": 0.5, "Ground": 2.0, "Rock": 2.0, "Dragon": 0.5},
+    "Electric": {"Water": 2.0, "Electric": 0.5, "Grass": 0.5, "Ground": 0.0, "Flying": 2.0, "Dragon": 0.5},
+    "Grass": {"Fire": 0.5, "Water": 2.0, "Grass": 0.5, "Poison": 0.5, "Ground": 2.0, "Flying": 0.5, "Bug": 0.5, "Rock": 2.0, "Dragon": 0.5, "Steel": 0.5},
+    "Ice": {"Fire": 0.5, "Water": 0.5, "Grass": 2.0, "Ice": 0.5, "Ground": 2.0, "Flying": 2.0, "Dragon": 2.0, "Steel": 0.5},
+    "Fighting": {"Normal": 2.0, "Ice": 2.0, "Poison": 0.5, "Flying": 0.5, "Psychic": 0.5, "Bug": 0.5, "Rock": 2.0, "Ghost": 0.0, "Dark": 2.0, "Steel": 2.0, "Fairy": 0.5},
+    "Poison": {"Grass": 2.0, "Poison": 0.5, "Ground": 0.5, "Rock": 0.5, "Ghost": 0.5, "Steel": 0.0, "Fairy": 2.0},
+    "Ground": {"Fire": 2.0, "Electric": 2.0, "Grass": 0.5, "Poison": 2.0, "Flying": 0.0, "Bug": 0.5, "Rock": 2.0, "Steel": 2.0},
+    "Flying": {"Electric": 0.5, "Grass": 2.0, "Fighting": 2.0, "Bug": 2.0, "Rock": 0.5, "Steel": 0.5},
+    "Psychic": {"Fighting": 2.0, "Poison": 2.0, "Psychic": 0.5, "Dark": 0.0, "Steel": 0.5},
+    "Bug": {"Fire": 0.5, "Grass": 2.0, "Fighting": 0.5, "Poison": 0.5, "Flying": 0.5, "Psychic": 2.0, "Ghost": 0.5, "Dark": 2.0, "Steel": 0.5, "Fairy": 0.5},
+    "Rock": {"Fire": 2.0, "Ice": 2.0, "Fighting": 0.5, "Ground": 0.5, "Flying": 2.0, "Bug": 2.0, "Steel": 0.5},
+    "Ghost": {"Normal": 0.0, "Psychic": 2.0, "Ghost": 2.0, "Dark": 0.5},
+    "Dragon": {"Dragon": 2.0, "Steel": 0.5, "Fairy": 0.0},
+    "Dark": {"Fighting": 0.5, "Psychic": 2.0, "Ghost": 2.0, "Dark": 0.5, "Fairy": 0.5},
+    "Steel": {"Fire": 0.5, "Water": 0.5, "Electric": 0.5, "Ice": 2.0, "Rock": 2.0, "Steel": 0.5, "Fairy": 2.0},
+    "Fairy": {"Fire": 0.5, "Fighting": 2.0, "Poison": 0.5, "Dragon": 2.0, "Dark": 2.0, "Steel": 0.5},
+}
+
+
+def is_super_effective(
+    move: str,
+    defender_types: list[str],
+    gen: int = DEFAULT_GEN,
+    attacker_ability: str | None = None,
+) -> bool:
+    """Check if a move is super effective against the defender's types.
+
+    Returns True if the move is super effective (2x or more) against the
+    defender's type combination (combined effectiveness of both types).
+
+    If attacker_ability is provided, accounts for type-changing abilities:
+    - Aerialate: Normal moves become Flying
+    - Pixilate: Normal moves become Fairy
+    - Galvanize: Normal moves become Electric
+    - Refrigerate: Normal moves become Ice
+    - Normalize: All moves become Normal
+    """
+    move_type_name = move_type(move, gen)
+    if not move_type_name:
+        return False  # Unknown move type, don't filter
+
+    # Apply type-changing abilities
+    if attacker_ability:
+        if attacker_ability == "Aerilate" and move_type_name == "Normal":
+            move_type_name = "Flying"
+        elif attacker_ability == "Pixilate" and move_type_name == "Normal":
+            move_type_name = "Fairy"
+        elif attacker_ability == "Galvanize" and move_type_name == "Normal":
+            move_type_name = "Electric"
+        elif attacker_ability == "Refrigerate" and move_type_name == "Normal":
+            move_type_name = "Ice"
+        elif attacker_ability == "Normalize":
+            move_type_name = "Normal"
+
+    # Calculate combined effectiveness against all defender types
+    combined_effectiveness = 1.0
+    for defender_type in defender_types:
+        if not defender_type:
+            continue
+        effectiveness = _TYPE_CHART.get(move_type_name, {}).get(defender_type, 1.0)
+        combined_effectiveness *= effectiveness
+
+    return combined_effectiveness >= 2.0
