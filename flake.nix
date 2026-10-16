@@ -135,7 +135,7 @@
 
             [Service]
             User=teambuilder
-            Environment=TEAMBUILDER_BIND=127.0.0.1:8000
+            Environment=TEAMBUILDER_BIND=127.0.0.1:6768
             ExecStart=${web}/bin/teambuilder-web
             Restart=on-failure
 
