@@ -649,7 +649,7 @@ def bulk_ko_finder():
 def bulk_survive_finder():
     """Find which Pokemon can survive an attack."""
     from teambuilder.pokedex import search_names, search
-    from teambuilder.damage import can_survive
+    from teambuilder.damage import attacking_stat, can_survive
     from teambuilder.filters import has_type, min_stat
 
     data = request.json
@@ -661,25 +661,23 @@ def bulk_survive_finder():
 
     percent = data.get('percent', 100.0)
 
-    # Build attacker options
+    # "32", "32+" or "32-": points in the stat the move attacks with, and for
+    # + or - a nature that raises or lowers it - the same reading
+    # min_evs_to_survive gives these strings.
     attacker_evs = {}
-    if data.get('attacker_evs'):
-        attacker_evs_str = data.get('attacker_evs')
-        if isinstance(attacker_evs_str, str):
-            if attacker_evs_str.endswith('+'):
-                ev_value = int(attacker_evs_str[:-1])
-                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
-                attacker_evs[stat] = ev_value
-            elif attacker_evs_str.endswith('-'):
-                ev_value = int(attacker_evs_str[:-1])
-                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
-                attacker_evs[stat] = ev_value
-            else:
-                ev_value = int(attacker_evs_str)
-                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
-                attacker_evs[stat] = ev_value
-
     attacker_opts = {}
+    evs_text = str(data.get('attacker_evs') or '').strip()
+    if evs_text:
+        stat = attacking_stat(move)
+        try:
+            attacker_evs[stat] = int(evs_text.rstrip('+-'))
+        except ValueError:
+            return jsonify({'success': False, 'error': f'Attacking stat investment must look like 32, 32+ or 32-, got {evs_text!r}'}), 400
+        if evs_text.endswith('+'):
+            attacker_opts['nature'] = 'Adamant' if stat == 'atk' else 'Modest'
+        elif evs_text.endswith('-'):
+            attacker_opts['nature'] = 'Modest' if stat == 'atk' else 'Adamant'
+
     if data.get('attacker_item'):
         attacker_opts['item'] = data['attacker_item']
     if data.get('attacker_ability'):
