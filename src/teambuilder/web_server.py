@@ -10,21 +10,6 @@ def index():
     """Serve the combined calculator page."""
     return render_template('calculator.html')
 
-@app.route('/search')
-def search_page():
-    """Serve the Pokemon search page."""
-    return render_template('search.html')
-
-@app.route('/bulk-ko')
-def bulk_ko_page():
-    """Serve the bulk KO finder page."""
-    return render_template('bulk_ko.html')
-
-@app.route('/bulk-survive')
-def bulk_survive_page():
-    """Serve the bulk survival finder page."""
-    return render_template('bulk_survive.html')
-
 @app.route('/api/pokemon')
 def get_pokemon():
     """Get list of all pokemon for autocomplete."""
@@ -662,23 +647,7 @@ def bulk_survive_finder():
     percent = data.get('percent', 100.0)
 
     # Build attacker options
-    attacker_evs = {}
-    if data.get('attacker_evs'):
-        attacker_evs_str = data.get('attacker_evs')
-        if isinstance(attacker_evs_str, str):
-            if attacker_evs_str.endswith('+'):
-                ev_value = int(attacker_evs_str[:-1])
-                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
-                attacker_evs[stat] = ev_value
-            elif attacker_evs_str.endswith('-'):
-                ev_value = int(attacker_evs_str[:-1])
-                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
-                attacker_evs[stat] = ev_value
-            else:
-                ev_value = int(attacker_evs_str)
-                stat = 'atk' if data.get('attacker_stat') == 'physical' else 'spa'
-                attacker_evs[stat] = ev_value
-
+    attacker_evs = data.get('attacker_evs','0')
     attacker_opts = {}
     if data.get('attacker_item'):
         attacker_opts['item'] = data['attacker_item']
@@ -798,36 +767,7 @@ def calculate_survival():
         defender_opts['item'] = data['defender_item']
     if data.get('defender_ability'):
         defender_opts['ability'] = data['defender_ability']
-
-    # Handle nature as nature multiplier (1.1, 1.0, or 0.9)
-    # The calculator expects nature as a string like 'Adamant', 'Bold', etc.
-    # We'll map the multipliers to appropriate natures
-    def_nature = data.get('def_nature', '1.0')
-    spd_nature = data.get('spd_nature', '1.0')
-
-    # Map nature multipliers to actual Pokemon natures
-    # +10% Def: Bold (+Def, -Atk)
-    # +10% SpD: Calm (+SpD, -Atk)
-    # -10% Def: Hasty (-Def, +Spe)
-    # -10% SpD: Naive (-SpD, +Spe)
-    # Neutral: Serious, Docile, Bashful, Quirky, Hardy, etc.
-
-    # Determine which stat's nature to use based on which is non-neutral
-    # If both are non-neutral, we need to prioritize one
-    nature_map = {
-        '1.1': {'def': 'Bold', 'spd': 'Calm'},
-        '1.0': {'def': 'Serious', 'spd': 'Serious'},
-        '0.9': {'def': 'Hasty', 'spd': 'Naive'}
-    }
-
-    # Use the first non-neutral nature, default to Serious
-    selected_nature = 'Serious'
-    if def_nature != '1.0':
-        selected_nature = nature_map[def_nature]['def']
-    elif spd_nature != '1.0':
-        selected_nature = nature_map[spd_nature]['spd']
-
-    defender_opts['nature'] = selected_nature
+    defender_nature = data.get('def_nature', "1.0")
 
     # Handle stat boosts (stage)
     if data.get('def_boost'):
@@ -903,7 +843,7 @@ def calculate_survival():
 
     try:
         result = min_evs_to_survive(
-            attacker, move, defender,
+            attacker, move, defender,defender_nature,
             percent=percent,
             showAll=show_all,
             attacker_evs=attacker_evs,
@@ -933,12 +873,13 @@ def calculate_survival():
 @app.route('/api/ko-calculation', methods=['POST'])
 def calculate_ko():
     """API endpoint for KO calculation using Python backend."""
-    from teambuilder.damage import min_evs_to_ko, attacking_stat
+    from teambuilder.damage import min_evs_to_ko, move_category
 
     data = request.json
 
     attacker = data.get('attacker')
     move = data.get('move')
+    move_cat = move_category(move)
     defender = data.get('defender')
     percent = data.get('percent', 100)
 
@@ -954,21 +895,21 @@ def calculate_ko():
         attacker_opts['boosts']['spa'] = int(data['attacker_boost'])
 
     # Handle attacker nature - map to actual Pokemon nature based on move category
-    attacker_nature_multiplier = data.get('attacker_nature', '1.0')
-    if attacker_nature_multiplier != '1.0':
+    attacker_nature_multiplier = data.get('attacker_nature', "1.0")
+    if attacker_nature_multiplier != "1.0":
         # We need to know which stat the move uses to pick the right nature
         # +10% Atk = Adamant, +10% SpA = Modest
         # -10% Atk = Modest, -10% SpA = Adamant
         from teambuilder.calc import move_category
         move_cat = move_category(move)
 
-        if attacker_nature_multiplier == '1.1':
+        if attacker_nature_multiplier == "1.1":
             # Positive nature for the attacking stat
             if move_cat == 'Physical':
                 attacker_opts['nature'] = 'Adamant'  # +Atk
             else:
                 attacker_opts['nature'] = 'Modest'  # +SpA
-        elif attacker_nature_multiplier == '0.9':
+        elif attacker_nature_multiplier == "0.9":
             # Negative nature for the attacking stat
             if move_cat == 'Physical':
                 attacker_opts['nature'] = 'Modest'  # -Atk
@@ -982,25 +923,6 @@ def calculate_ko():
     if data.get('defender_ability'):
         defender_opts['ability'] = data['defender_ability']
 
-    # Handle defender nature - prioritize the defensive stat being attacked
-    def_nature = data.get('def_nature', '1.0')
-    spd_nature = data.get('spd_nature', '1.0')
-
-    # Nature mapping for defender
-    nature_map = {
-        '1.1': {'def': 'Bold', 'spd': 'Calm'},
-        '1.0': {'def': 'Serious', 'spd': 'Serious'},
-        '0.9': {'def': 'Hasty', 'spd': 'Naive'}
-    }
-
-    selected_nature = 'Serious'
-    if def_nature != '1.0':
-        selected_nature = nature_map[def_nature]['def']
-    elif spd_nature != '1.0':
-        selected_nature = nature_map[spd_nature]['spd']
-
-    defender_opts['nature'] = selected_nature
-
     # Handle defender stat boosts
     if data.get('def_boost'):
         defender_opts['boosts'] = defender_opts.get('boosts', {})
@@ -1009,14 +931,13 @@ def calculate_ko():
         defender_opts['boosts'] = defender_opts.get('boosts', {})
         defender_opts['boosts']['spd'] = int(data['spd_boost'])
 
-    # Build defender_evs from the specific values
+    # Build defender_evs
     defender_evs = {}
     if data.get('defender_hp'):
         defender_evs['hp'] = int(data['defender_hp'])
-    if data.get('defender_def'):
-        defender_evs['def'] = int(data['defender_def'])
-    if data.get('defender_spd'):
-        defender_evs['spd'] = int(data['defender_spd'])
+    if data.get('defender_evs'):
+        defender_evs['def'] = data['defender_evs']
+        defender_evs['spd'] = data['defender_evs']
 
     field_opts = {}
     if data.get('terrain'):

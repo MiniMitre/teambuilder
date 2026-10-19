@@ -286,6 +286,32 @@ def least_damaged_ability(
         ),
     )
 
+NATURES = {
+    ("atk", "+"): "Adamant", ("atk", ""): "Serious", ("atk", "-"): "Modest",
+    ("spa", "+"): "Modest",  ("spa", ""): "Serious", ("spa", "-"): "Adamant",
+    ("def", "+"): "Relaxed", ("def", ""): "Serious", ("def", "-"): "Hasty",
+    ("spd", "+"): "Sassy",   ("spd", ""): "Serious", ("spd", "-"): "Naive",
+}
+
+# Every accepted modifier maps to "+", "" or "-"
+SIGNS = {
+    "+": "+", "1.1": "+",
+    "": "",   "1.0": "",  None: "",
+    "-": "-", "0.9": "-",
+}
+
+def split_ev(value):
+    value = str(value).strip()
+    if value.endswith(("+", "-")):
+        return int(value[:-1]), value[-1]
+    return int(value), None
+
+def with_nature(opts, modifier, stat):
+    print("with_nature", opts, modifier, stat)
+
+    if modifier:
+        return {**(opts or {}), "nature": NATURES[stat.lower(), SIGNS[modifier]]}
+    return opts
 
 def min_evs_to_ko(
     attacker: str,
@@ -307,7 +333,22 @@ def min_evs_to_ko(
     reading of "this OHKOes": a range that only sometimes reaches 100% does
     not count. For a Garanteed 2HKO set percent to 50.
     """
+    
+    def normalize_defender(defender_evs, defender_opts, defense_stat):
+        """Return (evs with int values, opts with nature set if the defense stat had a +/-)."""
+        defense_stat = defense_stat.lower()
+        evs, opts = {}, dict(defender_opts or {})
+        for name, raw in defender_evs.items():
+            evs[name], sign = split_ev(raw)
+            if sign and name.lower() == defense_stat:
+                opts["nature"] = NATURES[defense_stat, sign]
+        return evs, opts
+
     stat = attacking_stat(move)
+    defender_evs, defender_opts = normalize_defender(
+        defender_evs, defender_opts, relevant_defense_stat(stat)
+    )
+        
     return _cheapest(
         [
             build_request(
@@ -328,10 +369,12 @@ def min_evs_to_ko(
     )
 
 
+
 def min_evs_to_survive(
     attacker: str,
     move: str,
     defender: str,
+    defender_nature: str,
     *,
     percent: float = 100.0,
     showAll = False,
@@ -359,24 +402,18 @@ def min_evs_to_survive(
     """
     hp = "hp"
     invest = relevant_defense_stat(attacking_stat(move))
+    print("invest",invest)
+    print("defender_opts", defender_opts)
+    print("defender_nature", defender_nature)
+    defender_opts = with_nature(defender_opts, defender_nature, invest)
+    print("defender_opts", defender_opts)
 
     # If attacker_evs is a string, parse it
+    stat = attacking_stat(move)
     if isinstance(attacker_evs, str):
-        stat = attacking_stat(move)
-        if attacker_evs.endswith("+"):
-            ev_value = int(attacker_evs[:-1])
-            attacker_evs = {stat: ev_value}
-            maximizing_nature = "Adamant" if stat == "atk" else "Modest"
-            attacker_opts = {**(attacker_opts or {}), "nature": maximizing_nature}
-        elif attacker_evs.endswith("-"):
-            ev_value = int(attacker_evs[:-1])
-            attacker_evs = {stat: ev_value}
-            minimizing_nature = "Modest" if stat == "atk" else "Adamant"
-            attacker_opts = {**(attacker_opts or {}), "nature": minimizing_nature}
-        else:
-            # Plain number string
-            ev_value = int(attacker_evs)
-            attacker_evs = {stat: ev_value}
+        points, sign = split_ev(attacker_evs)
+        attacker_evs = {stat: points}
+        attacker_opts = with_nature(attacker_opts, sign, stat)
 
     breakpoints = find_damage_breakpoints(
         attacker, move, defender,
@@ -426,6 +463,8 @@ def find_damage_breakpoints(
     """The fewest `invest` EVs needed to reach each distinct max-damage value."""
     if invest not in ("hp", "def", "spd"):
         raise ValueError(f"invest must be hp, def or spd, got {invest!r}")
+
+    print("attacker:", attacker_opts, "| defender:", defender_opts)
 
     requests = [
         build_request(

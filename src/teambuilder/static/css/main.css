@@ -419,6 +419,12 @@ th {
 	font-size: 1.1em;
 	margin: 0.5em 0;
 	position: relative;
+	display: flex;
+}
+
+#attacker-evs,
+#defender-evs{
+	text-align: center;
 }
 
 .input-error {

@@ -145,7 +145,7 @@
 						Calculate
 					</button>
 					<div id="ko-threshold" style="margin-left: 20px; display: inline-block;">
-						<label for="ko-percent">KO Threshold (%)</label>
+						<label for="ko-percent">Defender HP (%)</label>
 						<input
 							type="number"
 							id="ko-percent"
@@ -157,7 +157,7 @@
 						/>
 					</div>
 					<div id="survival-threshold" style="margin-left: 20px; display: none;">
-						<label for="survival-percent">Survival Threshold (%)</label>
+						<label for="survival-percent">Defender HP (%)</label>
 						<input
 							type="number"
 							id="survival-percent"
@@ -262,7 +262,7 @@
 						<table>
 							<thead>
 								<tr>
-									<th>Attacking CP</th>
+									<th>Atk / SpA</th>
 									<th>Boosts</th>
 								</tr>
 							</thead>
@@ -272,8 +272,9 @@
 										<input
 											type="text"
 											id="attacker-evs"
+											placeholder="32+"
 											class="calc-trigger"
-											value="32"
+											value="0"
 											style="width: 60px"
 										/>
 									</td>
@@ -1210,17 +1211,13 @@
 						<table>
 							<thead>
 								<tr>
-									<th scope="col">Stat</th>
-									<th scope="col">EVs (0-32)</th>
-									<th scope="col">Nature</th>
+									<th scope="col">HP</th>
+									<th scope="col">Def / SpD</th>
 									<th scope="col">Boosts</th>
 								</tr>
 							</thead>
 							<tbody>
-								<tr class="hp">
-									<th scope="row">
-										<label for="def-hp">HP</label>
-									</th>
+								<tr>
 									<td>
 										<input
 											type="number"
@@ -1229,76 +1226,22 @@
 											value="0"
 											min="0"
 											max="32"
+											placeholder="32"
 											style="width: 60px"
 										/>
 									</td>
-									<td></td>
-									<td></td>
-								</tr>
-								<tr class="df">
-									<th scope="row">
-										<label for="def-def">Def</label>
-									</th>
 									<td>
 										<input
-											type="number"
-											id="def-def"
+											type="text"
+											id="defender-evs"
 											class="calc-trigger"
 											value="0"
-											min="0"
-											max="32"
+											placeholder="32+"
 											style="width: 60px"
 										/>
-									</td>
-									<td>
-										<select id="def-nature" class="calc-trigger" style="width: 80px">
-											<option value="1.1">+10%</option>
-											<option value="1.0" selected>-</option>
-											<option value="0.9">-10%</option>
-										</select>
 									</td>
 									<td>
 										<select id="def-boost" class="boost calc-trigger" style="width: 60px">
-											<option value="6">+6</option>
-											<option value="5">+5</option>
-											<option value="4">+4</option>
-											<option value="3">+3</option>
-											<option value="2">+2</option>
-											<option value="1">+1</option>
-											<option value="0" selected>0</option>
-											<option value="-1">-1</option>
-											<option value="-2">-2</option>
-											<option value="-3">-3</option>
-											<option value="-4">-4</option>
-											<option value="-5">-5</option>
-											<option value="-6">-6</option>
-										</select>
-									</td>
-								</tr>
-								<tr class="sd">
-									<th scope="row">
-										<label for="def-spd">SpD</label>
-									</th>
-									<td>
-										<input
-											type="number"
-											id="def-spd"
-											class="calc-trigger"
-											value="0"
-											min="0"
-											max="32"
-											style="width: 60px"
-										/>
-									</td>
-									<td>
-										<select id="spd-nature" class="calc-trigger" style="width: 80px">
-											<option value="1.1">+10%</option>
-											<option value="1.0" selected>-</option>
-											<option value="0.9">-10%</option>
-										</select>
-									</td>
-									<td>
-										<select id="spd-boost" class="boost calc-trigger" style="width: 60px">
 											<option value="6">+6</option>
 											<option value="5">+5</option>
 											<option value="4">+4</option>
@@ -1330,7 +1273,7 @@
 							<tbody>
 								<tr class="df">
 									<th scope="row">
-										<label for="def-nature">Def</label>
+										<label for="def-nature">Def / SpD</label>
 									</th>
 									<td>
 										<select id="def-nature" class="calc-trigger" style="width: 80px">
@@ -1357,37 +1300,9 @@
 										</select>
 									</td>
 								</tr>
-								<tr class="sd">
-									<th scope="row">
-										<label for="spd-nature">SpD</label>
-									</th>
-									<td>
-										<select id="spd-nature" class="calc-trigger" style="width: 80px">
-											<option value="1.1">+10%</option>
-											<option value="1.0" selected>-</option>
-											<option value="0.9">-10%</option>
-										</select>
-									</td>
-									<td>
-										<select id="spd-boost" class="boost calc-trigger" style="width: 60px">
-											<option value="6">+6</option>
-											<option value="5">+5</option>
-											<option value="4">+4</option>
-											<option value="3">+3</option>
-											<option value="2">+2</option>
-											<option value="1">+1</option>
-											<option value="0" selected>0</option>
-											<option value="-1">-1</option>
-											<option value="-2">-2</option>
-											<option value="-3">-3</option>
-											<option value="-4">-4</option>
-											<option value="-5">-5</option>
-											<option value="-6">-6</option>
-										</select>
-									</td>
-								</tr>
 							</tbody>
 						</table>
+					</div>
 					</div>
 				</fieldset>
 			</div>

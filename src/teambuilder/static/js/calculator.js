@@ -4,6 +4,11 @@ $(document).ready(function () {
 	let isLoadingMoveCategory = false; // track if we're loading move category
 	let currentCalculator = "ko"; // "ko" or "survival"
 
+	// Setup the initial state of the calculator
+	$("#survival-calc").prop("checked", false);
+	$("#ko-calc").prop("checked", true); 
+	$("#allResults").prop("checked", true);
+
 	// Page navigation handlers
 	$('#page-calculator').change(function() {
 		if ($(this).is(':checked')) {
@@ -583,10 +588,6 @@ $(document).ready(function () {
 			attacker_boost: $("#attacker-boost").val(),
 			defender_ability: $("#abilityR1").val(),
 			defender_item: $("#itemR1").val(),
-			def_nature: $("#def-nature").val(),
-			spd_nature: $("#spd-nature").val(),
-			def_boost: $("#def-boost").val(),
-			spd_boost: $("#spd-boost").val(),
 			terrain: getRadioValue("terrain"),
 			weather: getRadioValue("weather"),
 			field: collectCheckboxValues('input[name="fieldState"]'),
@@ -610,12 +611,16 @@ $(document).ready(function () {
 		if (currentCalculator === "ko") {
 			data.attacker_nature = $("#attacker-nature").val();
 			data.defender_hp = $("#def-hp").val();
-			data.defender_def = $("#def-def").val();
-			data.defender_spd = $("#def-spd").val();
+			data.defender_evs = $("#defender-evs").val();
 			data.percent = parseFloat($("#ko-percent").val());
 		} else {
 			data.attacker_evs = $("#attacker-evs").val();
+			data.def_nature = $("#def-nature").val();
+			data.spd_nature = $("#def-nature").val();
+			data.def_boost = $("#def-boost").val();
+			data.spd_boost = $("#def-boost").val();
 			data.percent = parseFloat($("#survival-percent").val());
+			
 			data.showAll = true; // Always calculate all results
 		}
 
@@ -624,6 +629,7 @@ $(document).ready(function () {
 		$("#mainResult").text("Calculating...");
 
 		const apiUrl = currentCalculator === "ko" ? "/api/ko-calculation" : "/api/survival";
+		console.log("to", apiUrl)
 
 		$.ajax({
 			url: apiUrl,
