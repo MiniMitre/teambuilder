@@ -412,6 +412,8 @@ def least_damaged_ability(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
 ) -> BestAbility:
     """Which of the defender's abilities takes the hit best, ties included.
 
@@ -429,6 +431,7 @@ def least_damaged_ability(
             attacker_evs=attacker_evs, attacker_opts=attacker_opts,
             defender_evs=defender_evs, defender_opts=defender_opts,
             move_opts=move_opts, field_opts=field_opts,
+            defender_side=defender_side, attacker_side=attacker_side,
         ),
     )
 
@@ -515,6 +518,8 @@ def min_evs_to_survive(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
 ) -> list[Investment] | None:
     """Fewest points across HP and the relevant defence to hold `move` under
     `percent`%, or None if 32/32 cannot manage it.
@@ -547,7 +552,9 @@ def min_evs_to_survive(
         defender_evs=defender_evs,
         defender_opts=defender_opts,
         move_opts=move_opts,
-        field_opts=field_opts
+        field_opts=field_opts,
+        defender_side=defender_side,
+        attacker_side=attacker_side,
     )
 
     optimal_EVs = calculate_HP_from_Breakpoints(breakpoints, percent, hp, invest, showAll=showAll)
@@ -561,6 +568,7 @@ def min_evs_to_survive(
         attacker_evs=attacker_evs, attacker_opts=attacker_opts,
         defender_evs=defender_evs, defender_opts=defender_opts,
         move_opts=move_opts, field_opts=field_opts,
+        defender_side=defender_side, attacker_side=attacker_side,
     )
     # _evaluate numbers results by their position in the batch, so the points
     # on a verified spread count nothing useful - put the real total back, and
@@ -583,6 +591,8 @@ def find_damage_breakpoints(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
 ) -> list[Investment]:
     """The fewest `invest` EVs needed to reach each distinct max-damage value."""
     if invest not in ("hp", "def", "spd"):
@@ -597,6 +607,8 @@ def find_damage_breakpoints(
             defender_opts=defender_opts,
             move_opts=move_opts,
             field_opts=field_opts,
+            defender_side=defender_side,
+            attacker_side=attacker_side,
         )
         for points in range(MAX_STAT_POINTS + 1)
     ]
@@ -808,6 +820,8 @@ def survive_filter(
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
     field_opts: dict | None = None,
+    defender_side: dict | None = None,
+    attacker_side: dict | None = None,
     db: Path = DB_PATH,
     progress_callback: Callable[[str, int, int], None] | None = None,
     result_callback: Callable[[dict], None] | None = None,
@@ -860,6 +874,7 @@ def survive_filter(
                 defender_evs={"hp": MAX_STAT_POINTS, "def": MAX_STAT_POINTS, "spd": MAX_STAT_POINTS},
                 defender_opts=defender_opts,
                 move_opts=move_opts, field_opts=field_opts,
+                defender_side=defender_side, attacker_side=attacker_side,
             )
             spreads = min_evs_to_survive(
                 attacker, move, name, None,  # no defender nature modifier
@@ -867,6 +882,7 @@ def survive_filter(
                 attacker_evs=evs, attacker_opts=a_opts,
                 defender_opts=_pin_ability(defender_opts, best.names[0]),
                 move_opts=move_opts, field_opts=field_opts,
+                defender_side=defender_side, attacker_side=attacker_side,
             )
             if spreads:
                 kept[name] = (spreads[0],)  # every returned spread costs the same
