@@ -169,6 +169,8 @@ $(document).ready(function () {
 		"Grassy Surge": "Grassy",
 		"Misty Surge": "Misty",
 		"Psychic Surge": "Psychic",
+		//Other abilities
+		"Fairy Aura": "fairy-aura",
 	};
 
 	// Helper function to collect checkbox values
@@ -607,21 +609,19 @@ $(document).ready(function () {
 			terrain: getRadioValue("terrain"),
 			weather: getRadioValue("weather"),
 			field: collectCheckboxValues('input[name="fieldState"]'),
-			spikesR: getRadioValue("spikesR", "0"),
-			isStealthRock: $("#srR").is(":checked"),
-			isReflect: $("#reflectR").is(":checked"),
-			isLightScreen: $("#lightScreenR").is(":checked"),
-			isAuroraVeil: $("#auroraVeilR").is(":checked"),
-			isFriendGuard: $("#friendGuardR").is(":checked"),
-			isProtect: $("#protectR").is(":checked"),
-			isLeechSeed: $("#leechSeedR").is(":checked"),
-			isSaltCure: $("#saltCureR").is(":checked"),
-			isCharge: $("#chargeR").is(":checked"),
-			isHelpingHand: $("#helpingHandR").is(":checked"),
-			isTailwind: $("#tailwindR").is(":checked"),
-			isPowerTrick: $("#powerTrickR").is(":checked"),
-			isStatBoost: $("#StatBoostR").is(":checked"),
-			isSwitching: $("#switchingR").is(":checked"),
+			spikes: getRadioValue("spikes", "0"),
+			isSR: $("#SR").is(":checked"),
+			isReflect: $("#reflect").is(":checked"),
+			isLightScreen: $("#lightScreen").is(":checked"),
+			isAuroraVeil: $("#auroraVeil").is(":checked"),
+			isFriendGuard: $("#friendGuard").is(":checked"),
+			isProtect: $("#protect").is(":checked"),
+			isLeechSeed: $("#leechSeed").is(":checked"),
+			isSaltCure: $("#saltCure").is(":checked"),
+			isCharge: $("#charge").is(":checked"),
+			isHelpingHand: $("#helpingHand").is(":checked"),
+			isPowerTrickLeft: $("#powerTrickR").is(":checked"),
+			isPowerTrickRight: $("#powerTrickR").is(":checked"),
 		};
 
 		if (currentCalculator === "ko") {

@@ -512,10 +512,7 @@ th {
 	width: 5em;
 	border-radius: 8px;
 }
-.btn-auto {
-	width: auto;
-	padding-inline:1rem;
-}
+
 .btn-wide {
 	width: 7em;
 }
@@ -530,6 +527,9 @@ th {
 }
 .btn-small {
 	width: 4em;
+}
+.btn-med{
+	width:6em;
 }
 .btn-xsmall {
 	width: 1em;

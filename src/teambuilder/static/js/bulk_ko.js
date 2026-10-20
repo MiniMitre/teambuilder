@@ -163,6 +163,9 @@ $(document).ready(function() {
         if ($('#wonder-room').is(':checked')) {
             data.field.push('WonderRoom');
         }
+        if ($('#fairy-aura').is(':checked')) {
+            data.field.push('FairyAura');
+        }
 
         // Attacker side conditions
         const attacker_side = {};
@@ -204,12 +207,6 @@ $(document).ready(function() {
         }
         if ($('#powerTrickL').is(':checked')) {
             attacker_side['isPowerTrick'] = true;
-        }
-        if ($('#StatBoostL').is(':checked')) {
-            attacker_side['isForesight'] = true;
-        }
-        if ($('#switchingL').is(':checked')) {
-            attacker_side['isSwitching'] = true;
         }
         data.attacker_side = attacker_side;
 
@@ -253,12 +250,6 @@ $(document).ready(function() {
         }
         if ($('#powerTrickR').is(':checked')) {
             defender_side['isPowerTrick'] = true;
-        }
-        if ($('#StatBoostR').is(':checked')) {
-            defender_side['isForesight'] = true;
-        }
-        if ($('#switchingR').is(':checked')) {
-            defender_side['isSwitching'] = true;
         }
         data.defender_side = defender_side;
 

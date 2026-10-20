@@ -9,11 +9,10 @@ from operator import and_
 # Side conditions that are plain booleans on the defender's side.
 DEFENDER_SIDE_FLAGS = (
     "isReflect", "isLightScreen", "isAuroraVeil", "isFriendGuard", "isProtect",
-    "isLeechSeed", "isSaltCure", "isCharge", "isHelpingHand", "isTailwind",
-    "isPowerTrick", "isSwitching",
+    "isLeechSeed", "isSaltCure", "isTailwind","isPowerTrick"
 )
 ALL_STATS = ("hp", "atk", "def", "spa", "spd", "spe")
-FIELD_STATE_KEYS = {"Gravity": "gravity", "MagicRoom": "isMagicRoom", "WonderRoom": "isWonderRoom"}
+FIELD_STATE_KEYS = {"Gravity": "isGravity", "MagicRoom": "isMagicRoom", "WonderRoom": "isWonderRoom", "FairyAura": "isFairyAura"}
 
 
 def truthy(value, default: bool = True) -> bool:
@@ -26,7 +25,7 @@ def truthy(value, default: bool = True) -> bool:
 
 
 def _as_list(data, key) -> list:
-    if hasattr(data, "getlist"):          # query string: ?field=Gravity&field=MagicRoom
+    if hasattr(data, "getlist"):          
         return data.getlist(key)
     value = data.get(key, [])
     return [value] if isinstance(value, str) else list(value)
@@ -74,17 +73,12 @@ def apply_defender_conditions(data, field_opts: dict, defender_opts: dict) -> No
     The one block that was identical in /api/survival and /api/ko-calculation.
     """
     side = {flag: True for flag in DEFENDER_SIDE_FLAGS if data.get(flag)}
-    if data.get("spikesR"):
-        side["spikes"] = int(data["spikesR"])
-    if data.get("isStealthRock"):
+    if data.get("spikes"):
+        side["spikes"] = int(data["spikes"])
+    if data.get("isSR"):
         side["isSR"] = True
     if side:
         field_opts["defenderSide"] = side
-
-    if data.get("isStatBoost"):
-        boosts = defender_opts.setdefault("boosts", {})
-        for stat in ALL_STATS:
-            boosts[stat] = boosts.get(stat, 0) + 1
 
 
 def build_matchup_options(data) -> tuple[dict, dict, dict]:

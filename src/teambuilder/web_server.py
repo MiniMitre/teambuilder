@@ -466,11 +466,13 @@ def bulk_ko_finder():
         field_states = [field_states]
     for state in field_states:
         if state == 'Gravity':
-            field_opts['gravity'] = True
+            field_opts['isGravity'] = True
         elif state == 'MagicRoom':
             field_opts['isMagicRoom'] = True
         elif state == 'WonderRoom':
             field_opts['isWonderRoom'] = True
+        elif state == 'FairyAura':
+            field_opts['isFairyAura'] = True
 
     # Get side conditions from request (they're now objects, not individual fields)
     defender_side = data.get('defender_side', {})
