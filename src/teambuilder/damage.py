@@ -126,6 +126,20 @@ def ko_result_row(name: str, investment: Investment, default_move: str = "Best m
     }
 
 
+def survive_result_row(name: str, investment: Investment) -> dict:
+    """The dict shape the bulk-survive endpoints and the SSE callback send to the UI."""
+    spread = investment.spread or {}
+    desc = investment.desc
+    return {
+        "name": name,
+        "points": investment.points,
+        "hp_invest": spread.get("hp", 0),
+        "defender_invest": spread.get("def", 0) + spread.get("spd", 0),
+        "ability": desc.split("Ability: ")[-1].split(",")[0] if "Ability:" in desc else "Any",
+        "desc": desc,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Natures and signed EVs ("32+", "0-")
 # ---------------------------------------------------------------------------
@@ -795,6 +809,8 @@ def survive_filter(
     move_opts: dict | None = None,
     field_opts: dict | None = None,
     db: Path = DB_PATH,
+    progress_callback: Callable[[str, int, int], None] | None = None,
+    result_callback: Callable[[dict], None] | None = None,
 ) -> DamageFilter:
     """Keeps candidates that can hold `attacker`'s `move` under `percent`%.
 
@@ -811,6 +827,10 @@ def survive_filter(
     min_evs_to_survive walks the damage breakpoints rather than pouring
     everything into one stat - so `.points` is the total and `.desc` names the
     split that earned it.
+
+    `progress_callback(name, index, total)` fires before each candidate and
+    `result_callback(row)` fires with a survive_result_row for each one kept,
+    exactly as in can_ko_any_atk. With a progress callback the tqdm bar is off.
     """
     if require_learns and not that_learn(move, [attacker], db=db):
         raise ValueError(f"{attacker} does not learn {move}")
@@ -822,9 +842,15 @@ def survive_filter(
 
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         kept = {}
+        names = _species_names(candidates)
+        total = len(names)
         # Two node processes per candidate, same as ko_filter, so a roster-sized
         # list runs for minutes with nothing to show for it otherwise.
-        for name in tqdm(_species_names(candidates), desc=f"Surviving {move} from {attacker}"):
+        iterator = tqdm(names, desc=f"Surviving {move} from {attacker}",
+                        disable=progress_callback is not None)
+        for idx, name in enumerate(iterator):
+            if progress_callback:
+                progress_callback(name, idx + 1, total)
             best = least_damaged_ability(
                 name, attacker, move,
                 attacker_evs=evs, attacker_opts=a_opts,
@@ -844,6 +870,8 @@ def survive_filter(
             )
             if spreads:
                 kept[name] = (spreads[0],)  # every returned spread costs the same
+                if result_callback:
+                    result_callback(survive_result_row(name, spreads[0]))
         return kept
 
     threshold = "survives" if percent == 100.0 else f"takes under {percent}% from"

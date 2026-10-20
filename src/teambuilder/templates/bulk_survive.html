@@ -81,6 +81,13 @@
 				background: #666;
 				cursor: not-allowed;
 			}
+			.search-btn.cancel {
+				background: #f44336;
+				margin-top: 8px;
+			}
+			.search-btn.cancel:hover {
+				background: #d32f2f;
+			}
 			.results-table {
 				width: 100%;
 				border-collapse: collapse;
@@ -249,6 +256,7 @@
 					</div>
 
 					<button class="search-btn" id="searchBtn">Find Defenders</button>
+					<button class="search-btn cancel" id="cancelBtn" style="display: none;">Cancel</button>
 				</div>
 
 				<div class="bulk-results">

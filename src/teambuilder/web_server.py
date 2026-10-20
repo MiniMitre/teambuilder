@@ -10,7 +10,7 @@ from teambuilder.api_helpers import (
 )
 from teambuilder.damage import (
     can_ko, can_ko_any_atk, can_survive, min_evs_to_ko, min_evs_to_survive,
-    attacking_stat, with_nature, ko_result_row,
+    attacking_stat, with_nature, ko_result_row, survive_result_row,
 )
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -20,6 +20,27 @@ app = Flask(__name__, template_folder='templates', static_folder='static')
 def index():
     """Serve the combined calculator page."""
     return render_template('calculator.html')
+
+
+# The navigation buttons on every page send the browser to these URLs.
+# Template names are the HTML files in teambuilder/templates/.
+@app.route('/search')
+def search_page():
+    """Serve the Pokemon search page."""
+    return render_template('search.html')
+
+
+@app.route('/bulk-ko')
+def bulk_ko_page():
+    """Serve the bulk KO finder page."""
+    return render_template('bulk_ko.html')
+
+
+@app.route('/bulk-survive')
+def bulk_survive_page():
+    """Serve the bulk survival finder page."""
+    return render_template('bulk_survive.html')
+
 
 
 # --------------------------------------------------------------------------
@@ -266,31 +287,18 @@ def run_bulk_ko(names, data, *, progress_callback=None, result_callback=None) ->
     return [ko_result_row(name, inv, default_move=move or 'Best move') for name, inv in found.items()]
 
 
-@app.route('/api/bulk-ko-stream', methods=['GET'])
-def bulk_ko_finder_stream():
-    """Find which Pokemon can KO a specific defender with SSE streaming."""
-    data = request.args
-    if not data.get('defender'):
-        return jsonify({'success': False, 'error': 'Defender Pokemon is required'}), 400
+def stream_events(task):
+    """Run `task(emit)` in a worker thread and stream what it emits as SSE.
 
+    `emit(dict)` pushes one message. A final 'complete' message (success or
+    error) is always sent, so the page knows when to close the EventSource.
+    """
     def generate():
         q = queue.Queue()
 
         def work():
             try:
-                names = candidate_names(data, ('bst', 'spe'))
-                q.put({'type': 'start', 'total': len(names)})
-                results = run_bulk_ko(
-                    names, data,
-                    progress_callback=lambda name, cur, total: q.put({
-                        'type': 'progress', 'name': name, 'current': cur,
-                        'total': total, 'percent': round(cur / total * 100, 1)}),
-                    result_callback=lambda row: q.put({'type': 'result', 'result': row}),
-                )
-                if data.get('move'):
-                    # A specific move can't stream, so send everything in one go.
-                    q.put({'type': 'batch_results', 'results': results})
-                # Any-move mode already streamed each hit via result_callback.
+                task(q.put)
                 q.put({'type': 'complete', 'success': True})
             except Exception as e:
                 q.put({'type': 'complete', 'success': False, 'error': str(e)})
@@ -302,6 +310,38 @@ def bulk_ko_finder_stream():
             yield f"data: {json.dumps(msg)}\n\n"
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+
+def _sse_callbacks(emit):
+    """(progress_callback, result_callback) that turn calls into SSE messages."""
+    def progress(name, current, total):
+        emit({'type': 'progress', 'name': name, 'current': current,
+              'total': total, 'percent': round(current / total * 100, 1)})
+
+    def result(row):
+        emit({'type': 'result', 'result': row})
+
+    return progress, result
+
+
+@app.route('/api/bulk-ko-stream', methods=['GET'])
+def bulk_ko_finder_stream():
+    """Find which Pokemon can KO a specific defender with SSE streaming."""
+    data = request.args
+    if not data.get('defender'):
+        return jsonify({'success': False, 'error': 'Defender Pokemon is required'}), 400
+
+    def task(emit):
+        names = candidate_names(data, ('bst', 'spe'))
+        emit({'type': 'start', 'total': len(names)})
+        progress, result = _sse_callbacks(emit)
+        results = run_bulk_ko(names, data, progress_callback=progress, result_callback=result)
+        if data.get('move'):
+            # A specific move can't stream, so send everything in one go.
+            emit({'type': 'batch_results', 'results': results})
+        # Any-move mode already streamed each hit via result_callback.
+
+    return stream_events(task)
 
 
 @app.route('/api/bulk-ko', methods=['POST'])
@@ -321,40 +361,49 @@ def bulk_ko_finder():
 # Bulk survive
 # --------------------------------------------------------------------------
 
+def run_bulk_survive(names, data, *, progress_callback=None, result_callback=None) -> list[dict]:
+    """Survive check over `names` against data['attacker']'s data['move']."""
+    results = can_survive(
+        names,
+        data['attacker'],
+        data['move'],
+        percent=float(data.get('percent', 100.0)),
+        attacker_evs=data.get('attacker_evs', '0') or None,   # "32", "32+", "0-" ...
+        attacker_opts=item_ability_opts(data, 'attacker') or None,
+        defender_opts=item_ability_opts(data, 'defender') or None,
+        progress_callback=progress_callback,
+        result_callback=result_callback,
+    )
+    return [survive_result_row(name, inv) for name, inv in results.items()]
+
+
+@app.route('/api/bulk-survive-stream', methods=['GET'])
+def bulk_survive_finder_stream():
+    """Find which Pokemon can survive an attack, streaming rows as they are found."""
+    data = request.args
+    if not data.get('attacker') or not data.get('move'):
+        return jsonify({'success': False, 'error': 'Attacker Pokemon and move are required'}), 400
+
+    def task(emit):
+        names = candidate_names(data, ('bst', 'hp'))
+        emit({'type': 'start', 'total': len(names)})
+        progress, result = _sse_callbacks(emit)
+        # Every hit already streams via result_callback, so nothing to send at the end.
+        run_bulk_survive(names, data, progress_callback=progress, result_callback=result)
+
+    return stream_events(task)
+
+
 @app.route('/api/bulk-survive', methods=['POST'])
 def bulk_survive_finder():
     """Find which Pokemon can survive an attack."""
     data = request.json
-
-    attacker = data.get('attacker')
-    move = data.get('move')
-    if not attacker or not move:
+    if not data.get('attacker') or not data.get('move'):
         return jsonify({'success': False, 'error': 'Attacker Pokemon and move are required'}), 400
 
     try:
-        results = can_survive(
-            candidate_names(data, ('bst', 'hp')),
-            attacker,
-            move,
-            percent=data.get('percent', 100.0),
-            attacker_evs=data.get('attacker_evs', '0') or None,
-            attacker_opts=item_ability_opts(data, 'attacker') or None,
-            defender_opts=item_ability_opts(data, 'defender') or None,
-        )
-
-        formatted_results = []
-        for name, investment in results.items():
-            spread = investment.spread or {}
-            formatted_results.append({
-                'name': name,
-                'points': investment.points,
-                'hp_invest': spread.get('hp', 0),
-                'defender_invest': spread.get('def', 0) + spread.get('spd', 0),
-                'ability': investment.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in investment.desc else 'Any',
-                'desc': investment.desc
-            })
-
-        return jsonify({'success': True, 'results': formatted_results})
+        names = candidate_names(data, ('bst', 'hp'))
+        return jsonify({'success': True, 'results': run_bulk_survive(names, data)})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
