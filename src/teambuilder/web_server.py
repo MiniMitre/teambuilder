@@ -442,7 +442,7 @@ def calculate_survival():
         data.get('attacker'), data.get('move'), data.get('defender'),
         data.get('defender_nature', '1.0'),          # survival-only: nature on the defence we invest in
         percent=data.get('percent', 100),
-        showAll=data.get('showAll', False),          # survival-only
+        showAll=True,                                # survival-only
         attacker_evs=data.get('attacker_evs', '0'),  # "32", "32+", "0-" ... parsed by normalize_evs
         attacker_opts=attacker_opts or None,
         defender_opts=defender_opts or None,

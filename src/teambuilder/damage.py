@@ -244,7 +244,7 @@ def _all(requests: list[dict], points: list[int] | None = None) -> list[Investme
     return [investment for _, investment in _evaluate(requests, points)]
 
 
-def calculate_HP_from_Breakpoints(breakpoints: list[Investment], PERCENT, HP, INVEST_IN, showAll=False
+def calculate_HP_from_Breakpoints(breakpoints: list[Investment], PERCENT, HP, INVEST_IN, showAll=True
 ):
     # Initialise the min points used above the 32/32 cap
     minPoints: int = 64
@@ -511,7 +511,7 @@ def min_evs_to_survive(
     defender_nature: str | None,
     *,
     percent: float = 100.0,
-    showAll=False,
+    showAll=True,
     attacker_opts: dict | None = None,
     attacker_evs: dict | str | None = None,
     defender_evs: dict | None = None,

@@ -226,11 +226,7 @@ $(document).ready(function () {
 		const minPoints = Math.min(...lastResults.map((r) => r.points));
 		$("#mainResult").text(minPoints + " points");
 
-		// Minimum Only hides everything above the minimum (only for survival calculator)
-		const showAll = $("#allResults").is(":checked");
-		const rows = showAll
-			? lastResults
-			: lastResults.filter((r) => r.points === minPoints);
+		const rows = lastResults
 
 		if (currentCalculator === "ko") {
 			// For KO calculator, we show attacking stat investment
@@ -635,7 +631,6 @@ $(document).ready(function () {
 		} else { // survival
 			data.attacker_evs = $("#attacker-evs").val();
 			data.defender_nature = $("#defender-nature").val();
-			data.showAll = true; // Always calculate all results, and filter afterwards
 		}
 
 		console.log("Sending data:", data);
