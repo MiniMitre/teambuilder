@@ -664,6 +664,8 @@ def ko_filter(
     defender_side: dict | None = None,
     attacker_side: dict | None = None,
     db: Path = DB_PATH,
+    progress_callback: Callable[[str, int, int], None] | None = None,
+    result_callback: Callable[[dict], None] | None = None,
 ) -> DamageFilter:
     """Keeps candidates that can guarantee `percent`% damage on `defender`.
 
@@ -675,6 +677,10 @@ def ko_filter(
     ability is whatever slot one happens to be. Thick Fat and friends have to
     be asked for; `survive_filter` is the side that picks abilities for the
     defender.
+
+    `progress_callback(name, index, total)` fires before each candidate and
+    `result_callback(row)` fires with a ko_result_row for each one kept. A
+    callback that raises stops the run, which is how a web request cancels it.
     """
     options = dict(
         attacker_opts=attacker_opts, defender_evs=defender_evs, defender_opts=defender_opts,
@@ -685,13 +691,18 @@ def ko_filter(
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         names = _species_names(candidates)
         if require_learns:
-            names = that_learn(move, names, db=db)
+            names = list(that_learn(move, names, db=db))
+        total = len(names)
 
         kept = {}
-        for name in names:
+        for idx, name in enumerate(names):
+            if progress_callback:
+                progress_callback(name, idx + 1, total)
             investment = _ko_at_best_ability(name, move, defender, percent=percent, **options)
             if investment is not None:
                 kept[name] = (investment,)
+                if result_callback:
+                    result_callback(ko_result_row(name, investment, default_move=move))
         return kept
 
     threshold = "KOes" if percent == 100.0 else f"deals {percent}% to"
