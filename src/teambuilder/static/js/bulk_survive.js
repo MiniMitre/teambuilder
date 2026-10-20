@@ -222,7 +222,7 @@ $(document).ready(function() {
                     <td>${result.name}</td>
                     <td>${result.points}</td>
                     <td>${result.hp_invest}</td>
-                    <td>${result.def_invest}</td>
+                    <td>${result.defender_invest}</td>
                     <td>${result.ability}</td>
                     <td>${result.desc}</td>
                 </tr>

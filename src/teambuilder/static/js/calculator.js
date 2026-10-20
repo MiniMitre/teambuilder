@@ -470,9 +470,9 @@ $(document).ready(function () {
 
 		if (currentCalculator === "ko") {
 			const attackerNature = $("#attacker-nature").val();
-			const defenderHp = $("#def-hp").val();
-			const defenderDef = $("#def-def").val();
-			const defenderSpd = $("#def-spd").val();
+			const defenderHp = $("#defender-hp").val();
+			const defenderDef = $("#defender-def").val();
+			const defenderSpd = $("#defender-spd").val();
 
 			// Use ATK or SPA based on move category
 			let statText = "";
@@ -527,9 +527,9 @@ $(document).ready(function () {
 	$("#itemL1").on("change", updateCalcHeader);
 	$("#defender-input").on("change", updateCalcHeader);
 	$("#abilityR1").on("change", updateCalcHeader);
-	$("#def-hp").on("input", updateCalcHeader);
-	$("#def-def").on("input", updateCalcHeader);
-	$("#def-spd").on("input", updateCalcHeader);
+	$("#defender-hp").on("input", updateCalcHeader);
+	$("#defender-def").on("input", updateCalcHeader);
+	$("#defender-spd").on("input", updateCalcHeader);
 	$('input[name="weather"]').on("change", updateCalcHeader);
 
 	// Remove error highlighting when user interacts with required fields
@@ -586,6 +586,7 @@ $(document).ready(function () {
 			attacker_ability: $("#abilityL1").val(),
 			attacker_item: $("#itemL1").val(),
 			attacker_boost: $("#attacker-boost").val(),
+			defender_boost: $("#defender-boost").val(),
 			defender_ability: $("#abilityR1").val(),
 			defender_item: $("#itemR1").val(),
 			terrain: getRadioValue("terrain"),
@@ -610,17 +611,13 @@ $(document).ready(function () {
 
 		if (currentCalculator === "ko") {
 			data.attacker_nature = $("#attacker-nature").val();
-			data.defender_hp = $("#def-hp").val();
+			data.defender_hp = $("#defender-hp").val();
 			data.defender_evs = $("#defender-evs").val();
 			data.percent = parseFloat($("#ko-percent").val());
-		} else {
+		} else { // survival
 			data.attacker_evs = $("#attacker-evs").val();
-			data.def_nature = $("#def-nature").val();
-			data.spd_nature = $("#def-nature").val();
-			data.def_boost = $("#def-boost").val();
-			data.spd_boost = $("#def-boost").val();
+			data.defender_nature = $("#defender-nature").val();
 			data.percent = parseFloat($("#survival-percent").val());
-			
 			data.showAll = true; // Always calculate all results
 		}
 

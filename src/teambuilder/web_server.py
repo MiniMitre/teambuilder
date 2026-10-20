@@ -704,13 +704,13 @@ def bulk_survive_finder():
         for name, investment in results.items():
             spread = investment.spread if investment.spread else {}
             hp_invest = spread.get('hp', 0)
-            def_invest = spread.get('def', 0) + spread.get('spd', 0)
+            defender_invest = spread.get('def', 0) + spread.get('spd', 0)
 
             formatted_results.append({
                 'name': name,
                 'points': investment.points,
                 'hp_invest': hp_invest,
-                'def_invest': def_invest,
+                'defender_invest': defender_invest,
                 'ability': investment.desc.split('Ability: ')[-1].split(',')[0] if 'Ability:' in investment.desc else 'Any',
                 'desc': investment.desc
             })
@@ -767,15 +767,11 @@ def calculate_survival():
         defender_opts['item'] = data['defender_item']
     if data.get('defender_ability'):
         defender_opts['ability'] = data['defender_ability']
-    defender_nature = data.get('def_nature', "1.0")
-
-    # Handle stat boosts (stage)
-    if data.get('def_boost'):
+    defender_nature = data.get('defender_nature', "1.0")
+    if data.get('defender_boost'):
         defender_opts['boosts'] = defender_opts.get('boosts', {})
-        defender_opts['boosts']['def'] = int(data['def_boost'])
-    if data.get('spd_boost'):
-        defender_opts['boosts'] = defender_opts.get('boosts', {})
-        defender_opts['boosts']['spd'] = int(data['spd_boost'])
+        defender_opts['boosts']['def'] = int(data['defender_boost'])
+        defender_opts['boosts']['spd'] = int(data['defender_boost'])
 
     field_opts = {}
     if data.get('terrain'):
@@ -922,14 +918,10 @@ def calculate_ko():
         defender_opts['item'] = data['defender_item']
     if data.get('defender_ability'):
         defender_opts['ability'] = data['defender_ability']
-
-    # Handle defender stat boosts
-    if data.get('def_boost'):
+    if data.get('defender_boost'):
         defender_opts['boosts'] = defender_opts.get('boosts', {})
-        defender_opts['boosts']['def'] = int(data['def_boost'])
-    if data.get('spd_boost'):
-        defender_opts['boosts'] = defender_opts.get('boosts', {})
-        defender_opts['boosts']['spd'] = int(data['spd_boost'])
+        defender_opts['boosts']['def'] = int(data['defender_boost'])
+        defender_opts['boosts']['spd'] = int(data['defender_boost'])
 
     # Build defender_evs
     defender_evs = {}
