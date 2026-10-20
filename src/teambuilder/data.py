@@ -12,6 +12,16 @@ POKES_PER_MOVE = FILES_PATH / "species_with_move.txt"
 
 DB_PATH = ROOT / "teambuilder.duckdb"
 
+# The dump has no names for the abilities Champions added with its new megas
+# and prints their ids instead ("315/315/315"). Each is named here after the
+# calculator's own gen 0 species data for that mega, which does carry them.
+ABILITY_IDS = {
+    "311": "Piercing Drill",  # Excadrill-Mega
+    "312": "Dragonize",       # Feraligatr-Mega
+    "315": "Mega Sol",        # Meganium-Mega
+    "318": "Spicy Spray",     # Scovillain-Mega
+}
+
 
 @dataclass(slots=True)
 class Pokemon:
@@ -48,7 +58,12 @@ def parse_one_poke(lines: list[str]) -> Pokemon:
     number, name = lines[0].split(" - ", 1)
     stats = [int(stat) for stat in lines[1].split("/")]
     types = [t.strip() for t in lines[2].split("/")]
-    abilities = [a.strip() for a in lines[3].split("/")]
+    abilities = [ABILITY_IDS.get(a.strip(), a.strip()) for a in lines[3].split("/")]
+    # An id stored as a name is not an error anywhere downstream - the
+    # calculator just runs without the ability - so stop the build instead.
+    unnamed = [a for a in abilities if a.isdigit()]
+    if unnamed:
+        raise ValueError(f"{name.strip()} has ability id {unnamed[0]} with no name - add it to ABILITY_IDS")
 
     # lines[4] is just "Moves:"
     # Move names contain dashes too ("Double-Edge"), so strip the leading

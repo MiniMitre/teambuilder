@@ -7,9 +7,9 @@ from typing import NamedTuple
 from tqdm import tqdm
 
 from teambuilder.calc import (
-    CalcError, build_request, calculate, move_category, is_super_effective,
-    move_type as get_move_type, _TYPE_CHART,
-)
+    TYPE_CHANGING_ABILITIES, CalcError, build_request, calculate, move_category,
+    is_super_effective, move_type as get_move_type, _TYPE_CHART,
+    )
 from teambuilder.data import DB_PATH
 from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn, _query
 
@@ -33,6 +33,7 @@ class Investment(NamedTuple):
     user_hp: int
     move: str | None = None        # set when the filter picked the move, not the caller
     spread: dict[str, int] | None = None  # set when the points cover more than one stat
+    ability: str | None = None     # set when the filter picked it; None if none of them mattered
 
     def __str__(self):
         with_move = f" with {self.move}" if self.move else ""
@@ -324,10 +325,18 @@ def verify_Min_EVs(
     ]
     return _all(requests, points=[sum(pair.values()) for pair in minPairs])
 
+def _chosen_ability(best: BestAbility, subject: str, db: Path) -> str | None:
+    """What a filter's ability pick is worth reporting: the tied names, or None
+    when `subject` had a choice and every ability it has came out the same.
 
-# ---------------------------------------------------------------------------
-# Ability scans
-# ---------------------------------------------------------------------------
+    A pokemon with one ability always names it - most megas - since "any" would
+    read as wrong next to an ability filter that just asked for that one.
+    """
+    abilities = get_abilities_for_poke(subject, db=db)
+    if len(abilities) > 1 and len(best.names) == len(abilities):
+        return None
+    return " / ".join(best.names)
+
 
 def _ability_scan(attacker: str, move: str, defender: str, *, vary: str, pick, options: dict):
     """Calculate this matchup once per ability of one side, and pick an extreme.
@@ -700,7 +709,7 @@ def ko_filter(
                 progress_callback(name, idx + 1, total)
             investment = _ko_at_best_ability(name, move, defender, percent=percent, **options)
             if investment is not None:
-                kept[name] = (investment,)
+                kept[name] = (investment._replace(ability=_chosen_ability(best, name, db)),)
                 if result_callback:
                     result_callback(ko_result_row(name, investment, default_move=move))
         return kept
@@ -796,7 +805,7 @@ def can_ko_any_atk(
                 investment = _ko_at_best_ability(name, move, defender, percent=percent, **options)
                 if investment is None:
                     continue
-                investment = investment._replace(move=move)
+                investment = investment._replace(move=move, ability=_chosen_ability(best, name, db))
                 if cheapest is None or investment.points < cheapest.points:
                     cheapest = investment
                 if cheapest.points == 0:

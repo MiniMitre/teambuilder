@@ -165,6 +165,42 @@ the tool needs.
 
 [MIT](LICENSE), Copyright (c) 2026 Mateo Puente.
 
+## Deploying with Nix
+
+`flake.nix` builds everything above - the champout data at a pinned commit,
+`@smogon/calc` from the tarball `package-lock.json` pins, and the database,
+built into the store - so a server needs only Nix with flakes enabled:
+
+```bash
+nix run github:matwate/teambuilder        # gunicorn on 127.0.0.1:8000
+nix run github:matwate/teambuilder#cli -- survive Rillaboom "Wood Hammer" Snorlax
+```
+
+`TEAMBUILDER_BIND` sets the address, and anything after `--` goes to gunicorn.
+As a systemd service, run by a user of its own (`useradd -m teambuilder`):
+
+```ini
+[Unit]
+Description=teambuilder web app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=teambuilder
+Environment=TEAMBUILDER_BIND=127.0.0.1:8000
+ExecStart=/nix/var/nix/profiles/default/bin/nix --extra-experimental-features "nix-command flakes" run github:matwate/teambuilder
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+A restart picks up the latest `main`: Nix rechecks the branch once its cached
+copy is an hour old, and builds only what changed. To hold a version instead,
+run `github:matwate/teambuilder/<commit>`. On NixOS the binary is
+`/run/current-system/sw/bin/nix`. Put a reverse proxy in front, with
+buffering off for `/api/bulk-ko-stream`, which streams its progress.
+
 ## Getting the champout data
 
 The learnset/moveset data comes from the `parse/` folder of the

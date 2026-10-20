@@ -74,12 +74,16 @@ def that_learn(move: str, names: list[str], *, db: Path = DB_PATH) -> list[str]:
     return [name for name in names if name in learners]
 
 
-def learnset(name: str, db:Path = DB_PATH) -> list[str]: 
+def learnset(name: str, db:Path = DB_PATH) -> list[str]:
+    """Every move `name` learns, once each, sorted by name.
 
+    Sorted rather than left to a set, whose order for strings changes with each
+    process's hash seed: callers that keep the first of several tied moves
+    would otherwise name a different one every run.
+    """
     rows = _query(
-            "SELECT move FROM pokemon_moves WHERE pokemon = ?", 
-            [name], 
+            "SELECT DISTINCT move FROM pokemon_moves WHERE pokemon = ? ORDER BY move",
+            [name],
             db=db
     )
-    names = {row[0] for row in rows}
-    return list(names)
+    return [row[0] for row in rows]

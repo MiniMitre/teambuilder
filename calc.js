@@ -127,20 +127,31 @@ function round(n) {
 // One bad line reports its own error and the rest still run, so a long batch
 // is never lost to a single typo. The exit code says whether any line failed.
 let failed = false;
-for (const line of require('fs').readFileSync(0, 'utf8').split('\n')) {
-  if (!line.trim()) continue;
-  let response;
+
+function answer(line) {
   let id;
   try {
     const request = JSON.parse(line);
     id = request.id;
-    response = respond(request);
+    return respond(request);
   } catch (err) {
     // Stay JSON on the way out too, so the caller parses one format either
     // way, and keep the id so a failure is still matched to its request.
-    response = id === undefined ? {error: err.message} : {error: err.message, id};
     failed = true;
+    return id === undefined ? {error: err.message} : {error: err.message, id};
   }
-  write(response);
 }
-if (failed) process.exitCode = 1;
+
+if (process.argv.includes('--serve')) {
+  // Long-lived: answer each line as it arrives and stay up until stdin
+  // closes, so the caller pays node's startup once rather than per batch.
+  // calc.py keeps one of these running - see calculate() there.
+  require('readline')
+    .createInterface({input: process.stdin})
+    .on('line', (line) => { if (line.trim()) write(answer(line)); });
+} else {
+  for (const line of require('fs').readFileSync(0, 'utf8').split('\n')) {
+    if (line.trim()) write(answer(line));
+  }
+  if (failed) process.exitCode = 1;
+}
