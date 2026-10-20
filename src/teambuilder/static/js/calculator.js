@@ -2,12 +2,49 @@ $(document).ready(function () {
 	let lastResults = null; // results from the most recent calculation
 	let currentMoveCategory = null; // track current move category
 	let isLoadingMoveCategory = false; // track if we're loading move category
-	let currentCalculator = "ko"; // "ko" or "survival"
+
+	const calculators = {KO: "ko", SURVIVAL: "survival"};
+	let currentCalculator = calculators.KO; //initialize as KO calculator
+
+	function setupCalculator(calculator) {
+		const isKoCalculator = calculator === calculators.KO;
+		currentCalculator = calculator;
+		
+		// Attacker nature
+		isKoCalculator ? $("#attacker-nature-header").show() : $("#attacker-nature-header").hide();
+		isKoCalculator ? $("#attacker-nature-input").show() : $("#attacker-nature-input").hide();
+
+		// Attacker EVs
+		isKoCalculator ? $("#attacker-evs-header").hide() : $("#attacker-evs-header").show();
+		isKoCalculator ? $("#attacker-evs-input").hide() : $("#attacker-evs-input").show();
+
+		// +/- nature Notes
+		isKoCalculator ? $("#attacker-note-survival").hide() : $("#attacker-note-survival").show();
+		isKoCalculator ? $("#defender-note-survival").show() : $("#defender-note-survival").hide();
+
+		// Defender HP
+		isKoCalculator ? $("#defender-hp-header").show() : $("#defender-hp-header").hide();
+		isKoCalculator ? $("#defender-hp-input").show() : $("#defender-hp-input").hide();
+
+		// Defender EVs
+		isKoCalculator ? $("#defender-evs-header").show() : $("#defender-evs-header").hide();
+		isKoCalculator ? $("#defender-evs-input").show() : $("#defender-evs-input").hide();
+
+		// Defender nature
+		isKoCalculator ? $("#defender-nature-header").hide() : $("#defender-nature-header").show();
+		isKoCalculator ? $("#defender-nature-input").hide() : $("#defender-nature-input").show();
+
+		$("#mainResult").text("Select Pokemon and Move to Calculate");
+		$("#resultTable").empty();
+		$("#calcHeader").text("");
+		lastResults = null;		
+	}
 
 	// Setup the initial state of the calculator
 	$("#survival-calc").prop("checked", false);
-	$("#ko-calc").prop("checked", true); 
+	$("#ko-calc").prop("checked", true);
 	$("#allResults").prop("checked", true);
+	setupCalculator(calculators.KO);
 
 	// Page navigation handlers
 	$('#page-calculator').change(function() {
@@ -280,37 +317,13 @@ $(document).ready(function () {
 	// Toggle between KO and Survival calculators
 	$("#ko-calc").on("change", function () {
 		if ($(this).is(":checked")) {
-			currentCalculator = "ko";
-			$("#ko-threshold").show();
-			$("#survival-threshold").hide();
-			$("#survival-results-toggle").hide();
-			$("#attacker-stats-ko").show();
-			$("#attacker-stats-survival").hide();
-			$("#attacker-note-survival").hide();
-			$("#defender-stats-ko").show();
-			$("#defender-stats-survival").hide();
-			$("#mainResult").text("Select Pokemon and Move to Calculate");
-			$("#resultTable").empty();
-			$("#calcHeader").text("");
-			lastResults = null;
+			setupCalculator(calculators.KO);
 		}
 	});
 
 	$("#survival-calc").on("change", function () {
 		if ($(this).is(":checked")) {
-			currentCalculator = "survival";
-			$("#ko-threshold").hide();
-			$("#survival-threshold").show();
-			$("#survival-results-toggle").show();
-			$("#attacker-stats-ko").hide();
-			$("#attacker-stats-survival").show();
-			$("#attacker-note-survival").show();
-			$("#defender-stats-ko").hide();
-			$("#defender-stats-survival").show();
-			$("#mainResult").text("Select Pokemon and Move to Calculate");
-			$("#resultTable").empty();
-			$("#calcHeader").text("");
-			lastResults = null;
+			setupCalculator(calculators.SURVIVAL);
 		}
 	});
 
@@ -471,8 +484,7 @@ $(document).ready(function () {
 		if (currentCalculator === "ko") {
 			const attackerNature = $("#attacker-nature").val();
 			const defenderHp = $("#defender-hp").val();
-			const defenderDef = $("#defender-def").val();
-			const defenderSpd = $("#defender-spd").val();
+			const defenderEvs = $("#defender-evs").val();
 
 			// Use ATK or SPA based on move category
 			let statText = "";
@@ -493,8 +505,7 @@ $(document).ready(function () {
 			// Add defender stats if any are non-zero
 			let defenderStats = [];
 			if (defenderHp && defenderHp != 0) defenderStats.push(`${defenderHp} HP`);
-			if (defenderDef && defenderDef != 0) defenderStats.push(`${defenderDef} Def`);
-			if (defenderSpd && defenderSpd != 0) defenderStats.push(`${defenderSpd} SpD`);
+			if (defenderEvs && defenderEvs != 0) defenderStats.push(`${defenderEvs} Def/SpD`);
 			if (defenderStats.length > 0) {
 				defenderText += ` (${defenderStats.join(", ")})`;
 			}
@@ -504,6 +515,7 @@ $(document).ready(function () {
 		} else {
 			// Survival calculator
 			const attackerEvs = $("#attacker-evs").val();
+			const defenderNature = $("#defender-nature").val();
 
 			// Use ATK or SPA based on move category
 			let evsText = attackerEvs;
@@ -514,6 +526,12 @@ $(document).ready(function () {
 
 			// Format move (without BP and type)
 			let moveText = move;
+
+			// Add defender nature if not neutral
+			if (defenderNature !== "1.0") {
+				const natureText = defenderNature === "1.1" ? "+" : "-";
+				defenderText = `${natureText}${defenderText}`;
+			}
 
 			const headerText = `${boostText}${evsText} ${attacker} ${moveText} vs. ${defenderText}${weatherText}`;
 			$("#calcHeader").text(headerText);
@@ -528,8 +546,8 @@ $(document).ready(function () {
 	$("#defender-input").on("change", updateCalcHeader);
 	$("#abilityR1").on("change", updateCalcHeader);
 	$("#defender-hp").on("input", updateCalcHeader);
-	$("#defender-def").on("input", updateCalcHeader);
-	$("#defender-spd").on("input", updateCalcHeader);
+	$("#defender-evs").on("input", updateCalcHeader);
+	$("#defender-nature").on("change", updateCalcHeader);
 	$('input[name="weather"]').on("change", updateCalcHeader);
 
 	// Remove error highlighting when user interacts with required fields
@@ -583,6 +601,7 @@ $(document).ready(function () {
 			attacker: attacker,
 			move: move,
 			defender: defender,
+			percent: parseFloat($("#percent").val()),
 			attacker_ability: $("#abilityL1").val(),
 			attacker_item: $("#itemL1").val(),
 			attacker_boost: $("#attacker-boost").val(),
@@ -613,20 +632,15 @@ $(document).ready(function () {
 			data.attacker_nature = $("#attacker-nature").val();
 			data.defender_hp = $("#defender-hp").val();
 			data.defender_evs = $("#defender-evs").val();
-			data.percent = parseFloat($("#ko-percent").val());
 		} else { // survival
 			data.attacker_evs = $("#attacker-evs").val();
 			data.defender_nature = $("#defender-nature").val();
-			data.percent = parseFloat($("#survival-percent").val());
-			data.showAll = true; // Always calculate all results
+			data.showAll = true; // Always calculate all results, and filter afterwards
 		}
 
 		console.log("Sending data:", data);
-
 		$("#mainResult").text("Calculating...");
-
 		const apiUrl = currentCalculator === "ko" ? "/api/ko-calculation" : "/api/survival";
-		console.log("to", apiUrl)
 
 		$.ajax({
 			url: apiUrl,

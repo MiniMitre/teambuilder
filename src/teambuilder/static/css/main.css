@@ -427,6 +427,15 @@ th {
 	text-align: center;
 }
 
+#calcHeader{
+	margin-top: 8px;
+	font-weight: bold;
+}
+
+.subtext{
+	color: #888;
+}
+
 .input-error {
 	border: 2px solid #ff4444 !important;
 	box-shadow: 0 0 5px rgba(255, 68, 68, 0.5) !important;
@@ -475,6 +484,24 @@ th {
 	white-space: nowrap;
 }
 
+
+.ml20{
+	margin-left: 20px !important;
+}
+
+.w60{
+	width: 60px !important;
+}
+
+.w80{
+	width: 80px !important;
+}	
+
+.w200{
+	width: 200px !important;
+}
+
+
 /* general button styling */
 .btn {
 	text-align: center;
@@ -484,6 +511,10 @@ th {
 	display: inline-block;
 	width: 5em;
 	border-radius: 8px;
+}
+.btn-auto {
+	width: auto;
+	padding-inline:1rem;
 }
 .btn-wide {
 	width: 7em;
@@ -729,6 +760,11 @@ select.toxic-counter {
 .field-info .btn {
 	font-size: 0.8em;
 }
+
+.format-selector{
+	width: 10.6em; margin: 0 auto 5px
+}
+
 table.field {
 	width: 100%;
 }

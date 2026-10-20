@@ -97,7 +97,7 @@
 					>
 				</span>
 				</div>
-				<div aria-label="Settings" role="region" id="survival-results-toggle" style="display: none;">
+				<div aria-label="Settings" role="region" id="survival-results-toggle">
 					<span
 						class="modeSelection"
 						aria-labelledby="selectResultsInstruction"
@@ -139,38 +139,24 @@
 					<div id="tooltipText">Copied</div>
 					<button
 						id="calculate-btn"
-						class="btn btn-wide"
-						style="margin-left: 20px"
+						class="btn btn-wide ml20"
 					>
 						Calculate
 					</button>
-					<div id="ko-threshold" style="margin-left: 20px; display: inline-block;">
-						<label for="ko-percent">Defender HP (%)</label>
+					<div id="threshold" class="ml20">
+						<label for="percent">Defender HP (%)</label>
 						<input
 							type="number"
-							id="ko-percent"
-							class="calc-trigger"
+							id="percent"
+							class="calc-trigger w60"
 							value="100"
 							min="0"
 							max="100"
-							style="width: 60px"
-						/>
-					</div>
-					<div id="survival-threshold" style="margin-left: 20px; display: none;">
-						<label for="survival-percent">Defender HP (%)</label>
-						<input
-							type="number"
-							id="survival-percent"
-							class="calc-trigger"
-							value="100"
-							min="0"
-							max="100"
-							style="width: 60px"
 						/>
 					</div>
 				</div>
 				<div class="small-text">
-					<div id="calcHeader" style="margin-top: 8px; font-weight: bold;"></div>
+					<div id="calcHeader"></div>
 					<table id="resultTable" class="result-table"></table>
 				</div>
 			</div>
@@ -181,7 +167,6 @@
 					<select
 						class="set-selector"
 						id="attacker-input"
-						style="width: 100%"
 					>
 						<option value="">Select Pokemon</option>
 					</select>
@@ -191,8 +176,7 @@
 							<label for="move-select">Move</label>
 							<select
 								id="move-select"
-								class="calc-trigger"
-								style="width: 200px"
+								class="calc-trigger w200"
 							></select>
 						</div>
 					</div>
@@ -202,87 +186,49 @@
 							<label for="abilityL1">Ability</label>
 							<select
 								id="abilityL1"
-								class="ability calc-trigger"
-								style="width: 200px"
+								class="ability calc-trigger w200"
 							></select>
 						</div>
 						<div>
 							<label for="itemL1">Item</label>
 							<select
 								id="itemL1"
-								class="item calc-trigger"
-								style="width: 200px"
+								class="item calc-trigger w200"
 							></select>
 						</div>
 					</div>
 
-					<div class="info-group" id="attacker-stats-ko">
+					<div class="info-group">
 						<table>
 							<thead>
 								<tr>
-									<th>Nature</th>
-									<th>Boosts</th>
+									<th id="attacker-nature-header" scope="col">Nature</th>
+									<th id="attacker-evs-header" scope="col">Atk / SpA</th>
+									<th scope="col">Boosts</th>
 								</tr>
 							</thead>
 							<tbody>
 								<tr>
-									<td>
-										<select id="attacker-nature" class="calc-trigger" style="width: 80px">
+									<td id="attacker-nature-input">
+										<select id="attacker-nature" class="calc-trigger w80">
 											<option value="1.1">+10%</option>
 											<option value="1.0" selected>-</option>
 											<option value="0.9">-10%</option>
 										</select>
 									</td>
-									<td>
-										<select
-											id="attacker-boost"
-											class="calc-trigger"
-											style="width: 60px"
-										>
-											<option value="6">+6</option>
-											<option value="5">+5</option>
-											<option value="4">+4</option>
-											<option value="3">+3</option>
-											<option value="2">+2</option>
-											<option value="1">+1</option>
-											<option value="0" selected>0</option>
-											<option value="-1">-1</option>
-											<option value="-2">-2</option>
-											<option value="-3">-3</option>
-											<option value="-4">-4</option>
-											<option value="-5">-5</option>
-											<option value="-6">-6</option>
-										</select>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-					<div class="info-group" id="attacker-stats-survival" style="display: none;">
-						<table>
-							<thead>
-								<tr>
-									<th>Atk / SpA</th>
-									<th>Boosts</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr>
-									<td>
+									<td id="attacker-evs-input">
 										<input
 											type="text"
 											id="attacker-evs"
 											placeholder="32+"
-											class="calc-trigger"
+											class="calc-trigger w60"
 											value="0"
-											style="width: 60px"
 										/>
 									</td>
 									<td>
 										<select
 											id="attacker-boost"
-											class="calc-trigger"
-											style="width: 60px"
+											class="calc-trigger w60"
 										>
 											<option value="6">+6</option>
 											<option value="5">+5</option>
@@ -300,12 +246,13 @@
 										</select>
 									</td>
 								</tr>
+								
 							</tbody>
 						</table>
 					</div>
-					<div class="info-group" id="attacker-note-survival" style="display: none;">
+					<div class="info-group" id="attacker-note-survival">
 						<div>
-							<small style="color: #888"
+							<small class="subtext"
 								>(Add + for +nature, - for -nature)</small
 							>
 						</div>
@@ -321,7 +268,7 @@
 						<div
 							aria-labelledby="selectBattleFormatInstruction"
 							role="radiogroup"
-							style="width: 10.6em; margin: 0 auto 5px"
+							class="format-selector"
 							title="Select the battle format."
 						>
 							<span
@@ -489,7 +436,7 @@
 									value="Gravity"
 									id="gravity"
 								/>
-								<label class="btn btn-small btn-left" for="gravity"
+								<label class="btn btn-auto btn-left" for="gravity"
 									>Gravity</label
 								>
 								<input
@@ -499,7 +446,7 @@
 									value="MagicRoom"
 									id="magic-room"
 								/>
-								<label class="btn btn-small btn-mid" for="magic-room"
+								<label class="btn btn-auto btn-mid" for="magic-room"
 									>Magic Room</label
 								>
 								<input
@@ -509,7 +456,7 @@
 									value="WonderRoom"
 									id="wonder-room"
 								/>
-								<label class="btn btn-small btn-right" for="wonder-room"
+								<label class="btn btn-auto btn-right" for="wonder-room"
 									>Wonder Room</label
 								>
 							</div>
@@ -1183,7 +1130,6 @@
 					<select
 						class="set-selector"
 						id="defender-input"
-						style="width: 100%"
 					>
 						<option value="">Select Pokemon</option>
 					</select>
@@ -1193,97 +1139,59 @@
 							<label for="abilityR1">Ability</label>
 							<select
 								id="abilityR1"
-								class="ability calc-trigger"
-								style="width: 200px"
+								class="ability calc-trigger w200"
 							></select>
 						</div>
 						<div>
 							<label for="itemR1">Item</label>
 							<select
 								id="itemR1"
-								class="item calc-trigger"
-								style="width: 200px"
+								class="item calc-trigger w200"
 							></select>
 						</div>
 					</div>
 
-					<div class="info-group" id="defender-stats-ko">
+					<div class="info-group">
 						<table>
 							<thead>
 								<tr>
-									<th scope="col">HP</th>
-									<th scope="col">Def / SpD</th>
+									<th id="defender-hp-header" scope="col">HP</th>
+									<th id="defender-evs-header" scope="col">Def / SpD</th>
+									<th id="defender-nature-header" scope="col">Nature</th>
 									<th scope="col">Boosts</th>
 								</tr>
 							</thead>
 							<tbody>
 								<tr>
-									<td>
+									<td id="defender-hp-input">
 										<input
 											type="number"
 											id="defender-hp"
-											class="calc-trigger"
+											class="calc-trigger w60"
 											value="0"
 											min="0"
 											max="32"
 											placeholder="32"
-											style="width: 60px"
 										/>
 									</td>
-									<td>
+									<td id="defender-evs-input">
 										<input
 											type="text"
 											id="defender-evs"
-											class="calc-trigger"
+											class="calc-trigger w60"
 											value="0"
 											placeholder="32+"
-											style="width: 60px"
 										/>
 									</td>
-									<td>
-										<select id="defender-boost" class="boost calc-trigger" style="width: 60px">
-											<option value="6">+6</option>
-											<option value="5">+5</option>
-											<option value="4">+4</option>
-											<option value="3">+3</option>
-											<option value="2">+2</option>
-											<option value="1">+1</option>
-											<option value="0" selected>0</option>
-											<option value="-1">-1</option>
-											<option value="-2">-2</option>
-											<option value="-3">-3</option>
-											<option value="-4">-4</option>
-											<option value="-5">-5</option>
-											<option value="-6">-6</option>
-										</select>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-					<div class="info-group" id="defender-stats-survival" style="display: none;">
-						<table>
-							<thead>
-								<tr>
-									<th></th>
-									<th scope="col">Nature</th>
-									<th scope="col">Boosts</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr class="df">
-									<th scope="row">
-										<label for="defender-nature">Def / SpD</label>
-									</th>
-									<td>
-										<select id="defender-nature" class="calc-trigger" style="width: 80px">
+									<td id="defender-nature-input">
+										<select id="defender-nature" class="calc-trigger w80">
 											<option value="1.1">+10%</option>
 											<option value="1.0" selected>-</option>
 											<option value="0.9">-10%</option>
 										</select>
 									</td>
-									<td>
-										<select id="defender-boost" class="boost calc-trigger" style="width: 60px">
+									<td id="defender-boost-input">
+										<select id="defender-boost" class="boost calc-trigger w60">
 											<option value="6">+6</option>
 											<option value="5">+5</option>
 											<option value="4">+4</option>
@@ -1302,6 +1210,27 @@
 								</tr>
 							</tbody>
 						</table>
+					</div>
+					<div class="info-group" id="defender-stats-survival">
+						<table>
+							<thead>
+								<tr>
+									
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<div class="info-group" id="defender-note-survival">
+						<div>
+							<small class="subtext"
+								>(Add + for +nature, - for -nature)</small
+							>
+						</div>
 					</div>
 					</div>
 				</fieldset>
