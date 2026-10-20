@@ -1,0 +1,131 @@
+"""teambuilder/api_helpers.py - turn request payloads into calculator options.
+
+Every calculator route used to re-implement these inline. `data` can be
+request.json (a dict) or request.args (a MultiDict); both work here.
+"""
+from functools import reduce
+from operator import and_
+
+# Side conditions that are plain booleans on the defender's side.
+DEFENDER_SIDE_FLAGS = (
+    "isReflect", "isLightScreen", "isAuroraVeil", "isFriendGuard", "isProtect",
+    "isLeechSeed", "isSaltCure", "isCharge", "isHelpingHand", "isTailwind",
+    "isPowerTrick", "isSwitching",
+)
+ALL_STATS = ("hp", "atk", "def", "spa", "spd", "spe")
+FIELD_STATE_KEYS = {"Gravity": "gravity", "MagicRoom": "isMagicRoom", "WonderRoom": "isWonderRoom"}
+
+
+def truthy(value, default: bool = True) -> bool:
+    """'true'/'True'/True -> True. JSON bodies send bools, query strings send text."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() == "true"
+
+
+def _as_list(data, key) -> list:
+    if hasattr(data, "getlist"):          # query string: ?field=Gravity&field=MagicRoom
+        return data.getlist(key)
+    value = data.get(key, [])
+    return [value] if isinstance(value, str) else list(value)
+
+
+def item_ability_opts(data, prefix: str, *, ability: bool = True) -> dict:
+    """{'item': ..., 'ability': ...} from f'{prefix}_item' / f'{prefix}_ability'."""
+    opts = {}
+    if data.get(f"{prefix}_item"):
+        opts["item"] = data[f"{prefix}_item"]
+    if ability and data.get(f"{prefix}_ability"):
+        opts["ability"] = data[f"{prefix}_ability"]
+    return opts
+
+
+def add_boost(opts: dict, data, key: str, stats) -> None:
+    """Apply one boost value from the request to several stats (mutates opts)."""
+    if data.get(key):
+        boosts = opts.setdefault("boosts", {})
+        for stat in stats:
+            boosts[stat] = int(data[key])
+
+
+def build_field_opts(data, *, with_format: bool = False) -> dict:
+    """Terrain, weather and the Gravity / Magic Room / Wonder Room toggles.
+
+    `with_format` is only wanted by the bulk endpoints, which also send
+    singles/doubles.
+    """
+    field_opts = {}
+    for key in ("terrain", "weather"):
+        if data.get(key):
+            field_opts[key] = data[key]
+    if with_format and data.get("format"):
+        field_opts["gameType"] = data["format"].capitalize()
+    for state in _as_list(data, "field"):
+        if state in FIELD_STATE_KEYS:
+            field_opts[FIELD_STATE_KEYS[state]] = True
+    return field_opts
+
+
+def apply_defender_conditions(data, field_opts: dict, defender_opts: dict) -> None:
+    """Side conditions, hazards and the '+1 all stats' toggle (mutates both dicts).
+
+    The one block that was identical in /api/survival and /api/ko-calculation.
+    """
+    side = {flag: True for flag in DEFENDER_SIDE_FLAGS if data.get(flag)}
+    if data.get("spikesR"):
+        side["spikes"] = int(data["spikesR"])
+    if data.get("isStealthRock"):
+        side["isSR"] = True
+    if side:
+        field_opts["defenderSide"] = side
+
+    if data.get("isStatBoost"):
+        boosts = defender_opts.setdefault("boosts", {})
+        for stat in ALL_STATS:
+            boosts[stat] = boosts.get(stat, 0) + 1
+
+
+def build_matchup_options(data) -> tuple[dict, dict, dict]:
+    """(attacker_opts, defender_opts, field_opts) for the single-matchup routes."""
+    attacker_opts = item_ability_opts(data, "attacker")
+    add_boost(attacker_opts, data, "attacker_boost", ("atk", "spa"))   # the move picks which one matters
+
+    defender_opts = item_ability_opts(data, "defender")
+    add_boost(defender_opts, data, "defender_boost", ("def", "spd"))
+
+    field_opts = build_field_opts(data)
+    apply_defender_conditions(data, field_opts, defender_opts)
+    return attacker_opts, defender_opts, field_opts
+
+
+def build_bulk_ko_kwargs(data) -> dict:
+    """Keyword arguments for can_ko / can_ko_any_atk, empty values as None."""
+    defender_evs = {s: int(data[f"defender_{s}"]) for s in ("hp", "def", "spd") if data.get(f"defender_{s}")}
+    return dict(
+        percent=float(data.get("percent", 100.0)),
+        defender_evs=defender_evs or None,
+        defender_opts=item_ability_opts(data, "defender") or None,
+        attacker_opts=item_ability_opts(data, "attacker", ability=False) or None,
+        field_opts=build_field_opts(data, with_format=True) or None,
+        defender_side=data.get("defender_side") or None,
+        attacker_side=data.get("attacker_side") or None,
+    )
+
+
+def candidate_names(data, min_stats=("bst",)) -> list[str]:
+    """Species passing the page's pre-filters: a type plus any `filter_min_<stat>`."""
+    from teambuilder.filters import has_type, min_stat
+    from teambuilder.pokedex import search, search_names
+
+    parts = []
+    if data.get("filter_type1"):
+        parts.append(has_type(data["filter_type1"]))
+    for stat in min_stats:
+        if data.get(f"filter_min_{stat}"):
+            parts.append(min_stat(stat, int(data[f"filter_min_{stat}"])))
+
+    if parts:
+        return [row[0] for row in search(reduce(and_, parts), columns="name")]
+    return search_names()

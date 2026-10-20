@@ -6,17 +6,24 @@ from typing import NamedTuple
 
 from tqdm import tqdm
 
-from teambuilder.calc import CalcError, build_request, calculate, move_category, is_super_effective
+from teambuilder.calc import (
+    CalcError, build_request, calculate, move_category, is_super_effective,
+    move_type as get_move_type, _TYPE_CHART,
+)
 from teambuilder.data import DB_PATH
 from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn, _query
 
-# Type-changing abilities that modify move types
-_TYPE_CHANGING_ABILITIES = {"Aerilate", "Pixilate", "Galvanize", "Refrigerate", "Normalize"}
+# Abilities that change a Normal move's type, and the type they change it to.
+_ABILITY_MOVE_TYPE = {
+    "Aerilate": "Flying", "Pixilate": "Fairy", "Galvanize": "Electric",
+    "Refrigerate": "Ice", "Normalize": "Normal",
+}
 
 # Champions gives each stat 0-32 points, so every search below is a scan over
 # 33 candidates in one batch - ~20ms, and damage is monotonic in the invested
 # stat, so the first spread that clears the bar is the cheapest one.
 MAX_STAT_POINTS = 32
+
 
 class Investment(NamedTuple):
     points: int
@@ -30,6 +37,8 @@ class Investment(NamedTuple):
     def __str__(self):
         with_move = f" with {self.move}" if self.move else ""
         return f"{self.points} points{with_move}: {self.desc}"
+
+
 class BestAbility(NamedTuple):
     """The attacker's hardest-hitting ability, and the damage that proves it."""
 
@@ -39,6 +48,7 @@ class BestAbility(NamedTuple):
 
     def __str__(self):
         return f"{' / '.join(self.names)}: {self.damage[0]}-{self.damage[1]}"
+
 
 def attacking_stat(move: str) -> str:
     """Which stat a move attacks off, by category.
@@ -55,7 +65,8 @@ def attacking_stat(move: str) -> str:
         raise ValueError(f"{move!r} is a Status move and deals no damage")
     return "spa" if category == "Special" else "atk"
 
-def relevant_defense_stat(attack_type:str) -> str:
+
+def relevant_defense_stat(attack_type: str) -> str:
     if attack_type == "spa":
         return "spd"
     elif attack_type == "atk":
@@ -63,6 +74,118 @@ def relevant_defense_stat(attack_type:str) -> str:
     else:
         raise ValueError(f"{attack_type!r} is not in a valid attack type")
 
+
+# ---------------------------------------------------------------------------
+# Small shared helpers
+# ---------------------------------------------------------------------------
+
+def _pin_ability(opts: dict | None, ability: str) -> dict:
+    """Copy of `opts` with the ability fixed, never mutating the caller's dict."""
+    return {**(opts or {}), "ability": ability}
+
+
+_NATURE_NAMES = {
+    'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty',
+    'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy',
+    'Docile', 'Bashful', 'Quirky', 'Serious',
+}
+_MULTI_WORD_ABILITIES = {
+    'Huge Power', 'Iron Fist', 'Rock Head', 'Super Luck', 'Wonder Guard', 'Pure Power',
+    'Skill Link', 'Serene Grace', 'Mold Breaker', 'Flash Fire', 'Water Absorb',
+    'Volt Absorb', 'Thick Fat', 'Swift Swim', 'Sand Rush', 'Sand Veil', 'Snow Cloak',
+    'Rain Dish', 'Natural Cure', 'Vital Spirit', 'Effect Spore', 'Poison Heal',
+    'Magic Guard', 'Magic Bounce', 'Shadow Tag', 'Arena Trap', 'Magnet Pull',
+}
+
+
+def ability_from_desc(desc: str) -> str:
+    """Pull the attacker's ability out of a calc description, or 'Any'.
+
+    Takes the token(s) after ' Atk '; if that is a number or a nature there was
+    no ability in the text. Only two-word abilities need listing; one-word
+    ones fall through.
+    """
+    _, found, after = desc.partition(" Atk ")
+    parts = after.split()
+    if not found or not parts:
+        return "Any"
+    if len(parts) >= 2 and f"{parts[0]} {parts[1]}" in _MULTI_WORD_ABILITIES:
+        return f"{parts[0]} {parts[1]}"
+    first = parts[0]
+    return "Any" if first.isdigit() or first in _NATURE_NAMES else first
+
+
+def ko_result_row(name: str, investment: Investment, default_move: str = "Best move") -> dict:
+    """The dict shape every KO endpoint and the SSE callback send to the UI."""
+    return {
+        "name": name,
+        "points": investment.points,
+        "move": investment.move or default_move,
+        "ability": ability_from_desc(investment.desc),
+        "desc": investment.desc,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Natures and signed EVs ("32+", "0-")
+# ---------------------------------------------------------------------------
+
+NATURES = {
+    ("atk", "+"): "Adamant", ("atk", ""): "Serious", ("atk", "-"): "Modest",
+    ("spa", "+"): "Modest",  ("spa", ""): "Serious", ("spa", "-"): "Adamant",
+    ("def", "+"): "Relaxed", ("def", ""): "Serious", ("def", "-"): "Hasty",
+    ("spd", "+"): "Sassy",   ("spd", ""): "Serious", ("spd", "-"): "Naive",
+}
+
+# Every accepted modifier maps to "+", "" or "-"
+SIGNS = {
+    "+": "+", "1.1": "+",
+    "": "",   "1.0": "",  None: "",
+    "-": "-", "0.9": "-",
+}
+
+
+def split_ev(value):
+    value = str(value).strip()
+    if value.endswith(("+", "-")):
+        return int(value[:-1]), value[-1]
+    return int(value), None
+
+
+def with_nature(opts, modifier, stat):
+    """opts with the nature that raises/lowers `stat`, or opts untouched.
+
+    A neutral modifier ("", "1.0", None) leaves opts alone instead of stamping
+    "Serious" over whatever nature the caller had set.
+    """
+    sign = SIGNS[modifier] if modifier else ""
+    if not sign:
+        return opts
+    return {**(opts or {}), "nature": NATURES[stat.lower(), sign]}
+
+
+def normalize_evs(evs, opts, stat):
+    """Accept EVs as None, "32+", or {"def": "32+", "hp": 4}; return (ints, opts).
+
+    A +/- on the entry for `stat` becomes the matching nature in opts. Both the
+    KO side (defender dict, stat = the defence being attacked) and the survival
+    side (attacker string, stat = the attacking stat) go through here.
+    """
+    if evs is None:
+        return None, opts
+    if isinstance(evs, str):
+        evs = {stat: evs}
+    clean = {}
+    for name, raw in evs.items():
+        clean[name], sign = split_ev(raw)
+        if sign and name.lower() == stat.lower():
+            opts = with_nature(opts, sign, stat)
+    return clean, opts
+
+
+# ---------------------------------------------------------------------------
+# Calculator plumbing
+# ---------------------------------------------------------------------------
 
 def _evaluate(requests: list[dict], points: list[int] | None = None):
     """Runs every request through the calculator, yielding (response, Investment) pairs.
@@ -80,6 +203,7 @@ def _evaluate(requests: list[dict], points: list[int] | None = None):
             tuple(response["range"]), response["defenderMaxHP"],
         )
         yield response, investment
+
 
 def _cheapest(requests: list[dict], accept) -> Investment | None:
     """First response that `accept` likes, which is the cheapest by monotonicity."""
@@ -100,16 +224,18 @@ def _breakpoints(requests: list[dict], key) -> list[Investment]:
             previous = current
     return breakpoints
 
+
 def _all(requests: list[dict], points: list[int] | None = None) -> list[Investment]:
     """Every Investment, one per request, in order."""
     return [investment for _, investment in _evaluate(requests, points)]
 
-def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INVEST_IN,showAll=False
+
+def calculate_HP_from_Breakpoints(breakpoints: list[Investment], PERCENT, HP, INVEST_IN, showAll=False
 ):
-    #Initialise the min points used at 32/32
-    minPoints:int = 64
-    minPairs:list[dict[str, int]] = []
-    allPairs:list[dict[str, int]] = []
+    # Initialise the min points used above the 32/32 cap
+    minPoints: int = 64
+    minPairs: list[dict[str, int]] = []
+    allPairs: list[dict[str, int]] = []
 
     for inv in breakpoints:
         dealt = inv.damage[1]
@@ -117,10 +243,10 @@ def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INV
         points = inv.points
         pct = PERCENT/100
         calculated_HP = ((dealt-pct*current_hp)/pct)
-        #Add a small amount to the caclculated HP, to make sure we always survive a hit (round up if needed)
-        adjusted_HP = max(ceil(calculated_HP + 0.01),0)
+        # Add a small amount to the calculated HP, to make sure we always survive a hit (round up if needed)
+        adjusted_HP = max(ceil(calculated_HP + 0.01), 0)
         if adjusted_HP > MAX_STAT_POINTS:
-            #We cannot survive at the given defense investment
+            # We cannot survive at the given defense investment
             continue
 
         total_points_used = adjusted_HP + points
@@ -133,26 +259,27 @@ def calculate_HP_from_Breakpoints(breakpoints:list[Investment], PERCENT, HP, INV
             continue
 
         if minPoints > total_points_used:
-            #Set the new best points
+            # Set the new best points
             minPoints = total_points_used
-            #Empty the list
+            # Empty the list
             minPairs.clear()
-            #Add the new best combination
+            # Add the new best combination
             minPairs.append({HP: adjusted_HP, INVEST_IN: points})
 
         elif minPoints == total_points_used:
-            #Add an equally good combination
+            # Add an equally good combination
             minPairs.append({HP: adjusted_HP, INVEST_IN: points})
 
         if calculated_HP < 0:
-            #We do not need to check any more values
+            # We do not need to check any more values
             break
     if showAll:
         return allPairs
 
     return minPairs
 
-def verify_Min_EVs (
+
+def verify_Min_EVs(
     minPairs: list[dict[str, int]],
     attacker: str,
     move: str,
@@ -168,20 +295,25 @@ def verify_Min_EVs (
     attacker_side: dict | None = None):
 
     requests = [
-    build_request(
-        attacker, move, defender,
-        attacker_evs=attacker_evs,
-        attacker_opts=attacker_opts,
-        defender_evs={**(defender_evs or {}), **pair},
-        defender_opts=defender_opts,
-        move_opts=move_opts,
-        field_opts=field_opts,
-        defender_side=defender_side,
-        attacker_side=attacker_side,
-    )
-    for pair in minPairs
+        build_request(
+            attacker, move, defender,
+            attacker_evs=attacker_evs,
+            attacker_opts=attacker_opts,
+            defender_evs={**(defender_evs or {}), **pair},
+            defender_opts=defender_opts,
+            move_opts=move_opts,
+            field_opts=field_opts,
+            defender_side=defender_side,
+            attacker_side=attacker_side,
+        )
+        for pair in minPairs
     ]
     return _all(requests, points=[sum(pair.values()) for pair in minPairs])
+
+
+# ---------------------------------------------------------------------------
+# Ability scans
+# ---------------------------------------------------------------------------
 
 def _ability_scan(attacker: str, move: str, defender: str, *, vary: str, pick, options: dict):
     """Calculate this matchup once per ability of one side, and pick an extreme.
@@ -198,7 +330,7 @@ def _ability_scan(attacker: str, move: str, defender: str, *, vary: str, pick, o
         # A new dict per request: mutating one shared dict would also hand the
         # caller's options back with an ability glued on.
         build_request(attacker, move, defender,
-                      **{**options, key: {**(options.get(key) or {}), "ability": name}})
+                      **{**options, key: _pin_ability(options.get(key), name)})
         for name in abilities
     ])
     for response in responses:
@@ -286,32 +418,29 @@ def least_damaged_ability(
         ),
     )
 
-NATURES = {
-    ("atk", "+"): "Adamant", ("atk", ""): "Serious", ("atk", "-"): "Modest",
-    ("spa", "+"): "Modest",  ("spa", ""): "Serious", ("spa", "-"): "Adamant",
-    ("def", "+"): "Relaxed", ("def", ""): "Serious", ("def", "-"): "Hasty",
-    ("spd", "+"): "Sassy",   ("spd", ""): "Serious", ("spd", "-"): "Naive",
-}
 
-# Every accepted modifier maps to "+", "" or "-"
-SIGNS = {
-    "+": "+", "1.1": "+",
-    "": "",   "1.0": "",  None: "",
-    "-": "-", "0.9": "-",
-}
+def _ko_at_best_ability(name, move, defender, *, percent, **options) -> Investment | None:
+    """Cheapest attacking investment for `name` to reach `percent`%, using the
+    ability that hits hardest. `options` are the calc kwargs both steps share
+    (attacker_opts, defender_evs, defender_opts, move_opts, field_opts,
+    defender_side, attacker_side).
 
-def split_ev(value):
-    value = str(value).strip()
-    if value.endswith(("+", "-")):
-        return int(value[:-1]), value[-1]
-    return int(value), None
+    The strongest-version-of-the-question rule lives here once: max points in
+    the attacking stat while *choosing* the ability, then min_evs_to_ko finds
+    the real minimum with that ability pinned.
+    """
+    best = most_damaging_ability(
+        name, move, defender,
+        attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
+        **options,
+    )
+    pinned = {**options, "attacker_opts": _pin_ability(options.get("attacker_opts"), best.names[0])}
+    return min_evs_to_ko(name, move, defender, percent=percent, **pinned)
 
-def with_nature(opts, modifier, stat):
-    print("with_nature", opts, modifier, stat)
 
-    if modifier:
-        return {**(opts or {}), "nature": NATURES[stat.lower(), SIGNS[modifier]]}
-    return opts
+# ---------------------------------------------------------------------------
+# Single-matchup solvers
+# ---------------------------------------------------------------------------
 
 def min_evs_to_ko(
     attacker: str,
@@ -331,24 +460,13 @@ def min_evs_to_ko(
 
     Guaranteed means the *lowest* roll clears the bar, which is the usual
     reading of "this OHKOes": a range that only sometimes reaches 100% does
-    not count. For a Garanteed 2HKO set percent to 50.
+    not count. For a guaranteed 2HKO set percent to 50.
     """
-    
-    def normalize_defender(defender_evs, defender_opts, defense_stat):
-        """Return (evs with int values, opts with nature set if the defense stat had a +/-)."""
-        defense_stat = defense_stat.lower()
-        evs, opts = {}, dict(defender_opts or {})
-        for name, raw in defender_evs.items():
-            evs[name], sign = split_ev(raw)
-            if sign and name.lower() == defense_stat:
-                opts["nature"] = NATURES[defense_stat, sign]
-        return evs, opts
-
     stat = attacking_stat(move)
-    defender_evs, defender_opts = normalize_defender(
+    defender_evs, defender_opts = normalize_evs(
         defender_evs, defender_opts, relevant_defense_stat(stat)
     )
-        
+
     return _cheapest(
         [
             build_request(
@@ -369,15 +487,14 @@ def min_evs_to_ko(
     )
 
 
-
 def min_evs_to_survive(
     attacker: str,
     move: str,
     defender: str,
-    defender_nature: str,
+    defender_nature: str | None,
     *,
     percent: float = 100.0,
-    showAll = False,
+    showAll=False,
     attacker_opts: dict | None = None,
     attacker_evs: dict | str | None = None,
     defender_evs: dict | None = None,
@@ -385,7 +502,6 @@ def min_evs_to_survive(
     move_opts: dict | None = None,
     field_opts: dict | None = None,
 ) -> list[Investment] | None:
-
     """Fewest points across HP and the relevant defence to hold `move` under
     `percent`%, or None if 32/32 cannot manage it.
 
@@ -394,6 +510,9 @@ def min_evs_to_survive(
     the cheapest total wins. `.points` on the result is that total, across both
     stats, and `.desc` names the spread that proves it.
 
+    `defender_nature` is "+", "-", "1.1", "0.9", "1.0", "" or None, applied to
+    the defence being invested in.
+
     `attacker_evs` can be:
     - A string like "32" for 32 investment in the relevant stat
     - A string like "32+" for 32 investment with maximizing nature (Adamant/Modest)
@@ -401,19 +520,10 @@ def min_evs_to_survive(
     - A dict for full EV spread control
     """
     hp = "hp"
-    invest = relevant_defense_stat(attacking_stat(move))
-    print("invest",invest)
-    print("defender_opts", defender_opts)
-    print("defender_nature", defender_nature)
-    defender_opts = with_nature(defender_opts, defender_nature, invest)
-    print("defender_opts", defender_opts)
-
-    # If attacker_evs is a string, parse it
     stat = attacking_stat(move)
-    if isinstance(attacker_evs, str):
-        points, sign = split_ev(attacker_evs)
-        attacker_evs = {stat: points}
-        attacker_opts = with_nature(attacker_opts, sign, stat)
+    invest = relevant_defense_stat(stat)
+    defender_opts = with_nature(defender_opts, defender_nature, invest)
+    attacker_evs, attacker_opts = normalize_evs(attacker_evs, attacker_opts, stat)
 
     breakpoints = find_damage_breakpoints(
         attacker, move, defender,
@@ -426,14 +536,13 @@ def min_evs_to_survive(
         field_opts=field_opts
     )
 
-    optimal_EVs = calculate_HP_from_Breakpoints(breakpoints,percent,hp,invest, showAll=showAll)
+    optimal_EVs = calculate_HP_from_Breakpoints(breakpoints, percent, hp, invest, showAll=showAll)
 
-    #Optimal_EV's is empty because we could not find a solution that survived
-    if not bool(optimal_EVs):
+    # optimal_EVs is empty because we could not find a solution that survived
+    if not optimal_EVs:
         return None
 
-    else:
-        verified = verify_Min_EVs(
+    verified = verify_Min_EVs(
         optimal_EVs, attacker, move, defender,
         attacker_evs=attacker_evs, attacker_opts=attacker_opts,
         defender_evs=defender_evs, defender_opts=defender_opts,
@@ -442,10 +551,11 @@ def min_evs_to_survive(
     # _evaluate numbers results by their position in the batch, so the points
     # on a verified spread count nothing useful - put the real total back, and
     # carry the split itself so callers do not have to read it out of the desc.
-        return [
-            verified[i]._replace(points=sum(optimal_EVs[i].values()), spread=optimal_EVs[i])
-            for i in range(len(verified))
-        ]
+    return [
+        verified[i]._replace(points=sum(optimal_EVs[i].values()), spread=optimal_EVs[i])
+        for i in range(len(verified))
+    ]
+
 
 def find_damage_breakpoints(
     attacker: str,
@@ -464,8 +574,6 @@ def find_damage_breakpoints(
     if invest not in ("hp", "def", "spd"):
         raise ValueError(f"invest must be hp, def or spd, got {invest!r}")
 
-    print("attacker:", attacker_opts, "| defender:", defender_opts)
-
     requests = [
         build_request(
             attacker, move, defender,
@@ -481,6 +589,9 @@ def find_damage_breakpoints(
     return _breakpoints(requests, key=lambda response: response["range"][1])
 
 
+# ---------------------------------------------------------------------------
+# Composable filters
+# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True, slots=True)
 class DamageFilter:
@@ -539,6 +650,12 @@ def ko_filter(
     be asked for; `survive_filter` is the side that picks abilities for the
     defender.
     """
+    options = dict(
+        attacker_opts=attacker_opts, defender_evs=defender_evs, defender_opts=defender_opts,
+        move_opts=move_opts, field_opts=field_opts,
+        defender_side=defender_side, attacker_side=attacker_side,
+    )
+
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         names = _species_names(candidates)
         if require_learns:
@@ -546,31 +663,22 @@ def ko_filter(
 
         kept = {}
         for name in names:
-            best = most_damaging_ability(
-                name, move, defender,
-                # The strongest version of the question: max points in the
-                # stat the move uses, so nothing is ruled out for lack of
-                # investment before the ability is even chosen.
-                attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
-                attacker_opts=attacker_opts,
-                defender_evs=defender_evs, defender_opts=defender_opts,
-                move_opts=move_opts, field_opts=field_opts,
-                defender_side=defender_side, attacker_side=attacker_side,
-            )
-            investment = min_evs_to_ko(
-                name, move, defender,
-                percent=percent,
-                attacker_opts={**(attacker_opts or {}), "ability": best.names[0]},
-                defender_evs=defender_evs, defender_opts=defender_opts,
-                move_opts=move_opts, field_opts=field_opts,
-                defender_side=defender_side, attacker_side=attacker_side,
-            )
+            investment = _ko_at_best_ability(name, move, defender, percent=percent, **options)
             if investment is not None:
                 kept[name] = (investment,)
         return kept
 
     threshold = "KOes" if percent == 100.0 else f"deals {percent}% to"
     return DamageFilter(f"{threshold} {defender} with {move}", run)
+
+
+def _effectiveness(attack_type: str, defender_types: list[str]) -> float:
+    """Combined type multiplier of `attack_type` against every defender type."""
+    result = 1.0
+    for defender_type in defender_types:
+        result *= _TYPE_CHART.get(attack_type, {}).get(defender_type, 1.0)
+    return result
+
 
 def can_ko_any_atk(
     defender: str,
@@ -596,7 +704,7 @@ def can_ko_any_atk(
 
     If `only_super_effective` is True, only checks moves that are super effective
     against the defender's types. This significantly speeds up the calculation.
-    This check accounts for type-changing abilities (Aerialate, Pixilate, etc.)
+    This check accounts for type-changing abilities (Aerilate, Pixilate, etc.)
     and properly calculates combined effectiveness against dual-type defenders.
 
     If `progress_callback` is provided, it will be called with (current_name, current_index, total)
@@ -605,162 +713,62 @@ def can_ko_any_atk(
     If `result_callback` is provided, it will be called with a formatted result dict when a
     successful KO is found.
     """
-    # Get defender's types for filtering
-    defender_types_row = _query("SELECT type1, type2 FROM pokemon WHERE name = ?", [defender], db=db)
-    if not defender_types_row:
+    rows = _query("SELECT type1, type2 FROM pokemon WHERE name = ?", [defender], db=db)
+    if not rows:
         raise ValueError(f"{defender!r} is not in the pokedex")
-    defender_types = [t for t in defender_types_row[0] if t]
+    defender_types = [t for t in rows[0] if t]
 
-    # Pre-compute which move types are SE against the defender (optimization)
-    # This avoids repeated type chart lookups
-    from teambuilder.calc import _TYPE_CHART
-    se_move_types = set()
-    for move_type in _TYPE_CHART.keys():
-        combined_effectiveness = 1.0
-        for defender_type in defender_types:
-            if not defender_type:
-                continue
-            effectiveness = _TYPE_CHART.get(move_type, {}).get(defender_type, 1.0)
-            combined_effectiveness *= effectiveness
-        if combined_effectiveness >= 2.0:
-            se_move_types.add(move_type)
+    # Pre-computed once: which move types, and which type-changing abilities,
+    # are super effective against this defender.
+    se_move_types = {t for t in _TYPE_CHART if _effectiveness(t, defender_types) >= 2.0}
+    se_abilities = {a for a, t in _ABILITY_MOVE_TYPE.items()
+                    if _effectiveness(t, defender_types) >= 2.0}
 
-    # Also pre-compute SE types for type-changing abilities
-    ability_se_types = {}
-    for ability in _TYPE_CHANGING_ABILITIES:
-        # Determine what type this ability changes moves to
-        ability_target_type = None
-        if ability == "Aerilate":
-            ability_target_type = "Flying"
-        elif ability == "Pixilate":
-            ability_target_type = "Fairy"
-        elif ability == "Galvanize":
-            ability_target_type = "Electric"
-        elif ability == "Refrigerate":
-            ability_target_type = "Ice"
-        elif ability == "Normalize":
-            ability_target_type = "Normal"
-
-        if ability_target_type:
-            combined_effectiveness = 1.0
-            for defender_type in defender_types:
-                if not defender_type:
-                    continue
-                effectiveness = _TYPE_CHART.get(ability_target_type, {}).get(defender_type, 1.0)
-                combined_effectiveness *= effectiveness
-            ability_se_types[ability] = combined_effectiveness >= 2.0
+    options = dict(
+        attacker_opts=attacker_opts, defender_evs=defender_evs, defender_opts=defender_opts,
+        move_opts=move_opts, field_opts=field_opts,
+        defender_side=defender_side, attacker_side=attacker_side,
+    )
 
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         kept = {}
         candidate_list = list(_species_names(candidates))
         total = len(candidate_list)
         # Use tqdm for console output if no callback, otherwise disable it
-        iterator = tqdm(candidate_list, desc=f"Attacks that KO {defender}", disable=progress_callback is not None)
+        iterator = tqdm(candidate_list, desc=f"Attacks that KO {defender}",
+                        disable=progress_callback is not None)
         for idx, name in enumerate(iterator):
             if progress_callback:
                 progress_callback(name, idx + 1, total)
+
+            # Only Normal moves can be turned super effective by -ate abilities.
+            ability_se = bool(set(get_abilities_for_poke(name, db=db)) & se_abilities)
+
+            def worth_checking(move: str) -> bool:
+                if not only_super_effective:
+                    return True
+                kind = get_move_type(move)
+                if not kind:
+                    return False  # unknown move type
+                return kind in se_move_types or (kind == "Normal" and ability_se)
+
             cheapest = None
-
-            # Get attacker's abilities for type-changing ability check
-            attacker_abilities = get_abilities_for_poke(name, db=db)
-            has_type_changing_ability = any(ability in _TYPE_CHANGING_ABILITIES for ability in attacker_abilities)
-
             for move in _damaging_moves(name, db=db):
-                # Filter to only super effective moves if requested
-                if only_super_effective:
-                    # Fast path: check if move type is in pre-computed SE set
-                    from teambuilder.calc import move_type
-                    move_type_name = move_type(move)
-                    if not move_type_name:
-                        continue  # Unknown move type, skip
-
-                    could_be_se = move_type_name in se_move_types
-
-                    # If not SE normally, check if any type-changing ability could make it SE
-                    if not could_be_se and has_type_changing_ability and move_type_name == "Normal":
-                        # Only Normal moves are affected by type-changing abilities
-                        for ability in attacker_abilities:
-                            if ability in _TYPE_CHANGING_ABILITIES and ability_se_types.get(ability, False):
-                                could_be_se = True
-                                break
-
-                    if not could_be_se:
-                        continue
-
-                best = most_damaging_ability(
-                    name, move, defender,
-                    attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
-                    attacker_opts=attacker_opts,
-                    defender_evs=defender_evs, defender_opts=defender_opts,
-                    move_opts=move_opts, field_opts=field_opts,
-                    defender_side=defender_side, attacker_side=attacker_side,
-                )
-                investment = min_evs_to_ko(
-                    name, move, defender,
-                    percent=percent,
-                    attacker_opts={**(attacker_opts or {}), "ability": best.names[0]},
-                    defender_evs=defender_evs, defender_opts=defender_opts,
-                    move_opts=move_opts, field_opts=field_opts,
-                    defender_side=defender_side, attacker_side=attacker_side,
-                )
+                if not worth_checking(move):
+                    continue
+                investment = _ko_at_best_ability(name, move, defender, percent=percent, **options)
                 if investment is None:
                     continue
                 investment = investment._replace(move=move)
                 if cheapest is None or investment.points < cheapest.points:
                     cheapest = investment
                 if cheapest.points == 0:
-                    break          # free already, nothing can beat it
+                    break  # free already, nothing can beat it
+
             if cheapest is not None:
                 kept[name] = (cheapest,)
                 if result_callback:
-                    # Extract ability from description
-                    ability = 'Any'
-                    desc = cheapest.desc
-                    if ' Atk ' in desc:
-                        atk_index = desc.find(' Atk ')
-                        if atk_index != -1:
-                            after_atk = desc[atk_index + 5:]
-                            parts = after_atk.split()
-
-                            known_multi_word_abilities = {'Huge Power', 'Iron Fist', 'Rock Head', 'Super Luck', 'Wonder Guard',
-                                                           'Pure Power', 'Skill Link', 'Serene Grace', 'Technician', 'Mold Breaker',
-                                                           'Flash Fire', 'Water Absorb', 'Volt Absorb', 'Thick Fat', 'Intimidate',
-                                                           'Overgrow', 'Blaze', 'Torrent', 'Swarm', 'Chlorophyll', 'Swift Swim',
-                                                           'Sand Rush', 'Sand Veil', 'Snow Cloak', 'Rain Dish', 'Forecast',
-                                                           'Trace', 'Pressure', 'Synchronize', 'Levitate', 'Natural Cure',
-                                                           'Insomnia', 'Vital Spirit', 'Soundproof', 'Effect Spore', 'Poison Heal',
-                                                           'Magic Guard', 'Magic Bounce', 'Unaware', 'Contrary', 'Simple',
-                                                           'Unburden', 'Shadow Tag', 'Arena Trap', 'Magnet Pull'}
-
-                            if parts:
-                                if len(parts) >= 2:
-                                    two_word = f"{parts[0]} {parts[1]}"
-                                    if two_word in known_multi_word_abilities:
-                                        ability = two_word
-                                    else:
-                                        candidate = parts[0]
-                                        if candidate.isdigit():
-                                            ability = 'Any'
-                                        elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
-                                            ability = 'Any'
-                                        else:
-                                            ability = candidate
-                                else:
-                                    candidate = parts[0]
-                                    if candidate.isdigit():
-                                        ability = 'Any'
-                                    elif candidate in {'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty', 'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy', 'Docile', 'Bashful', 'Quirky', 'Serious'}:
-                                        ability = 'Any'
-                                    else:
-                                        ability = candidate
-
-                    result_callback({
-                        'name': name,
-                        'points': cheapest.points,
-                        'move': cheapest.move if cheapest.move else 'Best move',
-                        'ability': ability,
-                        'desc': cheapest.desc
-                    })
+                    result_callback(ko_result_row(name, cheapest))
         return kept
 
     return DamageFilter(f"KOes {defender} with some attack", run)
@@ -773,13 +781,15 @@ def _damaging_moves(name: str, *, db: Path = DB_PATH) -> list[str]:
     does not, and attacking_stat raises on those, so they go out together.
     """
     return [m for m in learnset(name, db=db) if move_category(m) in ("Physical", "Special")]
+
+
 def survive_filter(
     attacker: str,
     move: str,
     *,
     percent: float = 100.0,
     require_learns: bool = True,
-    attacker_evs: dict | None = None,
+    attacker_evs: dict | str | None = None,
     attacker_opts: dict | None = None,
     defender_opts: dict | None = None,
     move_opts: dict | None = None,
@@ -805,6 +815,11 @@ def survive_filter(
     if require_learns and not that_learn(move, [attacker], db=db):
         raise ValueError(f"{attacker} does not learn {move}")
 
+    # The attacker is fixed for the whole run, so settle "32+" style input once.
+    # Bound to new names: assigning to attacker_evs inside run() would make it
+    # a local there.
+    evs, a_opts = normalize_evs(attacker_evs, attacker_opts, attacking_stat(move))
+
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         kept = {}
         # Two node processes per candidate, same as ko_filter, so a roster-sized
@@ -812,22 +827,23 @@ def survive_filter(
         for name in tqdm(_species_names(candidates), desc=f"Surviving {move} from {attacker}"):
             best = least_damaged_ability(
                 name, attacker, move,
-                attacker_evs=attacker_evs, attacker_opts=attacker_opts,
-                # Max points in the stat being invested, for the same reason
-                # ko_filter maxes the attacking stat before choosing.
-                defender_evs={"hp": MAX_STAT_POINTS, "def":MAX_STAT_POINTS,"spd":MAX_STAT_POINTS},
+                attacker_evs=evs, attacker_opts=a_opts,
+                # Max HP and both defences: the strongest version of the
+                # question, for the same reason ko_filter maxes the attacking
+                # stat before choosing.
+                defender_evs={"hp": MAX_STAT_POINTS, "def": MAX_STAT_POINTS, "spd": MAX_STAT_POINTS},
                 defender_opts=defender_opts,
                 move_opts=move_opts, field_opts=field_opts,
             )
-            investment = min_evs_to_survive(
-                attacker, move, name,
+            spreads = min_evs_to_survive(
+                attacker, move, name, None,  # no defender nature modifier
                 percent=percent,
-                attacker_evs=attacker_evs, attacker_opts=attacker_opts,
-                defender_opts={**(defender_opts or {}), "ability": best.names[0]},
+                attacker_evs=evs, attacker_opts=a_opts,
+                defender_opts=_pin_ability(defender_opts, best.names[0]),
                 move_opts=move_opts, field_opts=field_opts,
             )
-            if investment is not None:
-                kept[name] = (investment,)
+            if spreads:
+                kept[name] = (spreads[0],)  # every returned spread costs the same
         return kept
 
     threshold = "survives" if percent == 100.0 else f"takes under {percent}% from"
