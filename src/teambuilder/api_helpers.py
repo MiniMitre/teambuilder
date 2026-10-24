@@ -6,13 +6,23 @@ request.json (a dict) or request.args (a MultiDict); both work here.
 from functools import reduce
 from operator import and_
 
-# Side conditions that are plain booleans on the defender's side.
-DEFENDER_SIDE_FLAGS = (
-    "isReflect", "isLightScreen", "isAuroraVeil", "isFriendGuard", "isProtect",
-    "isLeechSeed", "isSaltCure", "isTailwind","isPowerTrick"
-)
+# Form field name -> damage-calculator property on the defender's side.
+DEFENDER_SIDE_FLAGS = {
+    "isReflect": "isReflect",
+    "isLightScreen": "isLightScreen",
+    "isAuroraVeil": "isAuroraVeil",
+    "isFriendGuard": "isFriendGuard",
+    "isProtect": "isProtected",
+    "isLeechSeed": "isSeeded",
+    "isSaltCure": "isSaltCured",
+}
 ALL_STATS = ("hp", "atk", "def", "spa", "spd", "spe")
-FIELD_STATE_KEYS = {"Gravity": "isGravity", "MagicRoom": "isMagicRoom", "WonderRoom": "isWonderRoom", "FairyAura": "isFairyAura"}
+FIELD_STATE_KEYS = {
+    "Gravity": "isGravity",
+    "MagicRoom": "isMagicRoom",
+    "WonderRoom": "isWonderRoom",
+    "FairyAura": "isFairyAura",
+}
 
 
 def truthy(value, default: bool = True) -> bool:
@@ -49,17 +59,16 @@ def add_boost(opts: dict, data, key: str, stats) -> None:
             boosts[stat] = int(data[key])
 
 
-def build_field_opts(data, *, with_format: bool = False) -> dict:
-    """Terrain, weather and the Gravity / Magic Room / Wonder Room toggles.
+def build_field_opts(data) -> dict:
+    """Terrain, weather and global field toggles.
 
-    `with_format` is only wanted by the bulk endpoints, which also send
-    singles/doubles.
+    A supplied battle format is used on both calculator pages.
     """
     field_opts = {}
     for key in ("terrain", "weather"):
         if data.get(key):
             field_opts[key] = data[key]
-    if with_format and data.get("format"):
+    if data.get("format"):
         field_opts["gameType"] = data["format"].capitalize()
     for state in _as_list(data, "field"):
         if state in FIELD_STATE_KEYS:
@@ -67,18 +76,34 @@ def build_field_opts(data, *, with_format: bool = False) -> dict:
     return field_opts
 
 
-def apply_defender_conditions(data, field_opts: dict, defender_opts: dict) -> None:
-    """Side conditions, hazards and the '+1 all stats' toggle (mutates both dicts).
+def apply_matchup_conditions(data, field_opts: dict) -> None:
+    """Add both sides' battle conditions and defender hazards to the field.
 
     The one block that was identical in /api/survival and /api/ko-calculation.
     """
-    side = {flag: True for flag in DEFENDER_SIDE_FLAGS if data.get(flag)}
+    attacker_side: dict[str, bool] = {}
+    if data.get("isHelpingHand"):
+        attacker_side["isHelpingHand"] = True
+    if data.get("isCharge"):
+        attacker_side["isCharge"] = True
+    if data.get("isPowerTrickLeft"):
+        attacker_side["isPowerTrick"] = True
+    if attacker_side:
+        field_opts["attackerSide"] = attacker_side
+
+    defender_side: dict[str, bool | int] = {
+        calc_flag: True
+        for form_flag, calc_flag in DEFENDER_SIDE_FLAGS.items()
+        if data.get(form_flag)
+    }
+    if data.get("isPowerTrickRight"):
+        defender_side["isPowerTrick"] = True
     if data.get("spikes"):
-        side["spikes"] = int(data["spikes"])
+        defender_side["spikes"] = int(data["spikes"])
     if data.get("isSR"):
-        side["isSR"] = True
-    if side:
-        field_opts["defenderSide"] = side
+        defender_side["isSR"] = True
+    if defender_side:
+        field_opts["defenderSide"] = defender_side
 
 
 def build_matchup_options(data) -> tuple[dict, dict, dict]:
@@ -90,7 +115,7 @@ def build_matchup_options(data) -> tuple[dict, dict, dict]:
     add_boost(defender_opts, data, "defender_boost", ("def", "spd"))
 
     field_opts = build_field_opts(data)
-    apply_defender_conditions(data, field_opts, defender_opts)
+    apply_matchup_conditions(data, field_opts)
     return attacker_opts, defender_opts, field_opts
 
 
@@ -102,7 +127,7 @@ def build_bulk_ko_kwargs(data) -> dict:
         defender_evs=defender_evs or None,
         defender_opts=item_ability_opts(data, "defender") or None,
         attacker_opts=item_ability_opts(data, "attacker", ability=False) or None,
-        field_opts=build_field_opts(data, with_format=True) or None,
+        field_opts=build_field_opts(data) or None,
         defender_side=data.get("defender_side") or None,
         attacker_side=data.get("attacker_side") or None,
     )

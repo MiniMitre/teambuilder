@@ -68,7 +68,9 @@ def main():
     slow = [row[0] for row in search(max_stat("spe", 60), columns="name")]
     mence_survival = survive_filter("Salamence-Mega", "Hyper Voice", attacker_evs={"spa": 32 } )
     for name, (investment, ) in mence_survival(slow).items():
-        spread = " / ".join(f"{points} {stat}" for stat, points in investment.spread.items())
+        spread = " / ".join(
+            f"{points} {stat}" for stat, points in (investment.spread or {}).items()
+        )
         print(f"  {name:<20} {investment.points:>2} points to survive  ({spread})")
 
 

@@ -606,6 +606,7 @@ $(document).ready(function () {
 			defender_boost: $("#defender-boost").val(),
 			defender_ability: $("#abilityR1").val(),
 			defender_item: $("#itemR1").val(),
+			format: getRadioValue("format", "doubles"),
 			terrain: getRadioValue("terrain"),
 			weather: getRadioValue("weather"),
 			field: collectCheckboxValues('input[name="fieldState"]'),
@@ -620,7 +621,7 @@ $(document).ready(function () {
 			isSaltCure: $("#saltCure").is(":checked"),
 			isCharge: $("#charge").is(":checked"),
 			isHelpingHand: $("#helpingHand").is(":checked"),
-			isPowerTrickLeft: $("#powerTrickR").is(":checked"),
+			isPowerTrickLeft: $("#powerTrickL").is(":checked"),
 			isPowerTrickRight: $("#powerTrickR").is(":checked"),
 		};
 

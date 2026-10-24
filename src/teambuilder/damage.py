@@ -7,8 +7,8 @@ from typing import NamedTuple
 from tqdm import tqdm
 
 from teambuilder.calc import (
-    TYPE_CHANGING_ABILITIES, CalcError, build_request, calculate, move_category,
-    is_super_effective, move_type as get_move_type, _TYPE_CHART,
+    CalcError, build_request, calculate, move_category,
+    move_type as get_move_type, _TYPE_CHART,
     )
 from teambuilder.data import DB_PATH
 from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn, _query
@@ -517,7 +517,7 @@ def min_evs_to_survive(
     attacker: str,
     move: str,
     defender: str,
-    defender_nature: str | None,
+    defender_nature: str | None = None,
     *,
     percent: float = 100.0,
     showAll=True,
@@ -707,6 +707,12 @@ def ko_filter(
         for idx, name in enumerate(names):
             if progress_callback:
                 progress_callback(name, idx + 1, total)
+
+            best = most_damaging_ability(
+                name, move, defender,
+                attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
+                **options,
+            )
             investment = _ko_at_best_ability(name, move, defender, percent=percent, **options)
             if investment is not None:
                 kept[name] = (investment._replace(ability=_chosen_ability(best, name, db)),)
@@ -802,6 +808,11 @@ def can_ko_any_atk(
             for move in _damaging_moves(name, db=db):
                 if not worth_checking(move):
                     continue
+                best = most_damaging_ability(
+                    name, move, defender,
+                    attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
+                    **options,
+                )
                 investment = _ko_at_best_ability(name, move, defender, percent=percent, **options)
                 if investment is None:
                     continue

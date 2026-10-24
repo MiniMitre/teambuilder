@@ -3,5 +3,5 @@ teambuilder.duckdb
 __pycache__/
 *.pyc
 node_modules/
-damage-calc/
+damage-calc/a
 result

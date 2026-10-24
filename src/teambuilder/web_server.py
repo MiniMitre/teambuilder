@@ -1,6 +1,4 @@
-from flask import Flask, send_from_directory, jsonify, request, render_template, Response, stream_with_context
-from pathlib import Path
-import os
+from flask import Flask, jsonify, request, render_template, Response, stream_with_context
 import json
 import queue
 import threading
@@ -193,11 +191,29 @@ def get_move_category(move):
         return jsonify({'error': str(e)}), 500
 
 
+def _sse_callbacks(emit):
+    """Create progress/result callbacks that write SSE frames."""
+
+    def progress_callback(name, current, total):
+        emit({
+            'type': 'progress',
+            'name': name,
+            'current': current,
+            'total': total,
+            'percent': round((current / total) * 100, 1),
+        })
+
+    def result_callback(result):
+        emit({'type': 'result', 'result': result})
+
+    return progress_callback, result_callback
+
+
 @app.route('/api/search', methods=['POST'])
 def search_pokemon():
     """Search Pokemon with filters for type, stats, and move learning."""
     from teambuilder.pokedex import search
-    from teambuilder.filters import Filter, has_type, learns, min_stat, max_stat, stat_between
+    from teambuilder.filters import has_type, learns, min_stat, max_stat, stat_between
 
     data = request.json
 
@@ -293,6 +309,7 @@ def stream_events(task):
     `emit(dict)` pushes one message. A final 'complete' message (success or
     error) is always sent, so the page knows when to close the EventSource.
     """
+    q = queue.Queue()
 
     def work():
         try:
@@ -300,117 +317,13 @@ def stream_events(task):
             q.put({'type': 'complete', 'success': True})
         except Exception as e:
             q.put({'type': 'complete', 'success': False, 'error': str(e)})
-    
+
     def generate():
-        q = queue.Queue()
-
-        def progress_callback(name, current, total):
-            q.put({
-                'type': 'progress',
-                'name': name,
-                'current': current,
-                'total': total,
-                'percent': round((current / total) * 100, 1)
-            })
-
-        def result_callback(result):
-            q.put({
-                'type': 'result',
-                'result': result
-            })
-
-        def run_calculation():
-            try:
-                # Get Pokemon names with filters applied
-                filters = None
-
-                # Apply attacker filters to narrow down candidates
-                filter_type1 = data.get('filter_type1')
-                if filter_type1:
-                    type_filter = has_type(filter_type1)
-                    filters = type_filter if filters is None else filters & type_filter
-
-                filter_min_bst = data.get('filter_min_bst')
-                if filter_min_bst:
-                    bst_filter = min_stat('bst', int(filter_min_bst))
-                    filters = bst_filter if filters is None else filters & bst_filter
-
-                filter_min_spe = data.get('filter_min_spe')
-                if filter_min_spe:
-                    spe_filter = min_stat('spe', int(filter_min_spe))
-                    filters = spe_filter if filters is None else filters & spe_filter
-
-                # Get candidates - either filtered or all
-                if filters:
-                    filtered_results = search(filters, columns="name")
-                    candidates = [row[0] for row in filtered_results]
-                else:
-                    candidates = search_names()
-
-                q.put({
-                    'type': 'start',
-                    'total': len(candidates)
-                })
-
-                if move:
-                    # Use can_ko for specific move (no streaming support for this mode)
-                    results = can_ko(
-                        candidates,
-                        move,
-                        defender,
-                        percent=percent,
-                        defender_evs=defender_evs if defender_evs else None,
-                        defender_opts=defender_opts if defender_opts else None,
-                        attacker_opts=attacker_opts if attacker_opts else None,
-                        field_opts=field_opts if field_opts else None,
-                        defender_side=defender_side if defender_side else None,
-                        attacker_side=attacker_side if attacker_side else None
-                    )
-                    # Send all results at once
-                    formatted_results = []
-                    for name, investment in results.items():
-                        ability = investment.ability or 'Any'
-
-                        formatted_results.append({
-                            'name': name,
-                            'points': investment.points,
-                            'move': investment.move if investment.move else move,
-                            'ability': ability,
-                            'desc': investment.desc
-                        })
-                    q.put({
-                        'type': 'batch_results',
-                        'results': formatted_results
-                    })
-                else:
-                    # Use can_ko_any_atk to find best move
-                    filter_obj = can_ko_any_atk(
-                        defender,
-                        percent=percent,
-                        defender_evs=defender_evs if defender_evs else None,
-                        defender_opts=defender_opts if defender_opts else None,
-                        attacker_opts=attacker_opts if attacker_opts else None,
-                        field_opts=field_opts if field_opts else None,
-                        defender_side=defender_side if defender_side else None,
-                        attacker_side=attacker_side if attacker_side else None,
-                        only_super_effective=only_super_effective,
-                        progress_callback=progress_callback,
-                        result_callback=result_callback
-                    )
-                    filter_results = filter_obj.run(candidates)
-                    # Results are already streamed via result_callback, just send completion
-
-                q.put({
-                    'type': 'complete',
-                    'success': True
-                })
-            except Exception as e:
-                q.put({'type': 'complete', 'success': False, 'error': str(e)})
-            finally:
-                q.put(None)  # Signal end
-
-        threading.Thread(target=work).start()
-        while (msg := q.get()) is not None:
+        threading.Thread(target=work, daemon=True).start()
+        while True:
+            msg = q.get()
+            if msg is None:
+                break
             yield f"data: {json.dumps(msg)}\n\n"
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
@@ -604,7 +517,9 @@ def bulk_survive_finder():
     from teambuilder.filters import ability as can_have_ability, has_type, min_stat
 
     data = request.json
-    if not data.get('attacker') or not data.get('move'):
+    attacker = data.get('attacker')
+    move = data.get('move')
+    if not attacker or not move:
         return jsonify({'success': False, 'error': 'Attacker Pokemon and move are required'}), 400
 
     percent = data.get('percent', 100.0)
@@ -778,9 +693,13 @@ def calculate_ko():
     return _respond(compute)
 
 
+from teambuilder.test_runner import main as run_tests
+
+
 def run_web():
-    """Entry point for running the web server."""
-    app.run(debug=True, port=5000)
+    """Run the test suite once, then start the Flask web server."""
+    run_tests()
+    app.run(debug=False, use_reloader=False, port=5000)
 
 
 if __name__ == '__main__':
