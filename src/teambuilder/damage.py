@@ -122,7 +122,7 @@ def ko_result_row(name: str, investment: Investment, default_move: str = "Best m
         "name": name,
         "points": investment.points,
         "move": investment.move or default_move,
-        "ability": ability_from_desc(investment.desc),
+        "ability": investment.ability or ability_from_desc(investment.desc),
         "desc": investment.desc,
     }
 
@@ -445,23 +445,35 @@ def least_damaged_ability(
     )
 
 
-def _ko_at_best_ability(name, move, defender, *, percent, **options) -> Investment | None:
-    """Cheapest attacking investment for `name` to reach `percent`%, using the
-    ability that hits hardest. `options` are the calc kwargs both steps share
-    (attacker_opts, defender_evs, defender_opts, move_opts, field_opts,
-    defender_side, attacker_side).
+def _ko_at_best_ability(
+    name, move, defender, *, percent, positive_nature=False, db=DB_PATH, **options
+) -> Investment | None:
+    """Cheapest attacking investment with the hardest-hitting ability.
 
-    The strongest-version-of-the-question rule lives here once: max points in
-    the attacking stat while *choosing* the ability, then min_evs_to_ko finds
-    the real minimum with that ability pinned.
+    If requested, also compares the neutral attacker options against the
+    nature that raises the move's attacking stat.
     """
-    best = most_damaging_ability(
-        name, move, defender,
-        attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
-        **options,
-    )
-    pinned = {**options, "attacker_opts": _pin_ability(options.get("attacker_opts"), best.names[0])}
-    return min_evs_to_ko(name, move, defender, percent=percent, **pinned)
+    stat = attacking_stat(move)
+    nature_options = [options]
+    if positive_nature:
+        raised_opts = with_nature(options.get("attacker_opts"), "+", stat)
+        nature_options.append({**options, "attacker_opts": raised_opts})
+
+    cheapest = None
+    for nature_opts in nature_options:
+        best = most_damaging_ability(
+            name, move, defender,
+            attacker_evs={stat: MAX_STAT_POINTS},
+            **nature_opts,
+        )
+        pinned = {
+            **nature_opts,
+            "attacker_opts": _pin_ability(nature_opts.get("attacker_opts"), best.names[0]),
+        }
+        investment = min_evs_to_ko(name, move, defender, percent=percent, **pinned)
+        if investment is not None and (cheapest is None or investment.points < cheapest.points):
+            cheapest = investment._replace(ability=_chosen_ability(best, name, db))
+    return cheapest
 
 
 # ---------------------------------------------------------------------------
@@ -664,6 +676,7 @@ def ko_filter(
     defender: str,
     *,
     percent: float = 100.0,
+    positive_nature: bool = False,
     require_learns: bool = True,
     attacker_opts: dict | None = None,
     defender_evs: dict | None = None,
@@ -681,6 +694,8 @@ def ko_filter(
     Each candidate is asked at its own hardest-hitting ability, so one that is
     dropped cannot do it with any ability. One that is kept may need an
     ability it does not always run - read `.desc` before trusting it.
+    When `positive_nature` is True, the neutral result is compared with the
+    nature that boosts the move's attacking stat.
 
     The defender is calculated exactly as `defender_opts` describes it, so its
     ability is whatever slot one happens to be. Thick Fat and friends have to
@@ -708,14 +723,12 @@ def ko_filter(
             if progress_callback:
                 progress_callback(name, idx + 1, total)
 
-            best = most_damaging_ability(
-                name, move, defender,
-                attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
-                **options,
+            investment = _ko_at_best_ability(
+                name, move, defender, percent=percent,
+                positive_nature=positive_nature, db=db, **options,
             )
-            investment = _ko_at_best_ability(name, move, defender, percent=percent, **options)
             if investment is not None:
-                kept[name] = (investment._replace(ability=_chosen_ability(best, name, db)),)
+                kept[name] = (investment,)
                 if result_callback:
                     result_callback(ko_result_row(name, investment, default_move=move))
         return kept
@@ -736,6 +749,7 @@ def can_ko_any_atk(
     defender: str,
     *,
     percent: float = 100.0,
+    positive_nature: bool = False,
     attacker_opts: dict | None = None,
     defender_evs: dict | None = None,
     defender_opts: dict | None = None,
@@ -764,6 +778,8 @@ def can_ko_any_atk(
 
     If `result_callback` is provided, it will be called with a formatted result dict when a
     successful KO is found.
+
+    `positive_nature` also checks the nature that raises each move's attacking stat.
     """
     rows = _query("SELECT type1, type2 FROM pokemon WHERE name = ?", [defender], db=db)
     if not rows:
@@ -808,15 +824,13 @@ def can_ko_any_atk(
             for move in _damaging_moves(name, db=db):
                 if not worth_checking(move):
                     continue
-                best = most_damaging_ability(
-                    name, move, defender,
-                    attacker_evs={attacking_stat(move): MAX_STAT_POINTS},
-                    **options,
+                investment = _ko_at_best_ability(
+                    name, move, defender, percent=percent,
+                    positive_nature=positive_nature, db=db, **options,
                 )
-                investment = _ko_at_best_ability(name, move, defender, percent=percent, **options)
                 if investment is None:
                     continue
-                investment = investment._replace(move=move, ability=_chosen_ability(best, name, db))
+                investment = investment._replace(move=move)
                 if cheapest is None or investment.points < cheapest.points:
                     cheapest = investment
                 if cheapest.points == 0:
@@ -845,6 +859,7 @@ def survive_filter(
     move: str,
     *,
     percent: float = 100.0,
+    defender_nature: str | None = None,
     require_learns: bool = True,
     attacker_evs: dict | str | None = None,
     attacker_opts: dict | None = None,
@@ -872,6 +887,8 @@ def survive_filter(
     min_evs_to_survive walks the damage breakpoints rather than pouring
     everything into one stat - so `.points` is the total and `.desc` names the
     split that earned it.
+    `defender_nature` is passed to the solver and applied to the defence the
+    move targets.
 
     `progress_callback(name, index, total)` fires before each candidate and
     `result_callback(row)` fires with a survive_result_row for each one kept,
@@ -884,6 +901,8 @@ def survive_filter(
     # Bound to new names: assigning to attacker_evs inside run() would make it
     # a local there.
     evs, a_opts = normalize_evs(attacker_evs, attacker_opts, attacking_stat(move))
+    defensive_stat = relevant_defense_stat(attacking_stat(move))
+    natured_defender_opts = with_nature(defender_opts, defender_nature, defensive_stat)
 
     def run(candidates: Iterable[str]) -> dict[str, tuple[Investment, ...]]:
         kept = {}
@@ -903,15 +922,15 @@ def survive_filter(
                 # question, for the same reason ko_filter maxes the attacking
                 # stat before choosing.
                 defender_evs={"hp": MAX_STAT_POINTS, "def": MAX_STAT_POINTS, "spd": MAX_STAT_POINTS},
-                defender_opts=defender_opts,
+                defender_opts=natured_defender_opts,
                 move_opts=move_opts, field_opts=field_opts,
                 defender_side=defender_side, attacker_side=attacker_side,
             )
             spreads = min_evs_to_survive(
-                attacker, move, name, None,  # no defender nature modifier
+                attacker, move, name, defender_nature,
                 percent=percent,
                 attacker_evs=evs, attacker_opts=a_opts,
-                defender_opts=_pin_ability(defender_opts, best.names[0]),
+                defender_opts=_pin_ability(natured_defender_opts, best.names[0]),
                 move_opts=move_opts, field_opts=field_opts,
                 defender_side=defender_side, attacker_side=attacker_side,
             )

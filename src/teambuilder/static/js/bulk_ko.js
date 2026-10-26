@@ -129,7 +129,7 @@ $(document).ready(function() {
             return;
         }
 
-        // Collect form data
+        // Collect form data using the same Field controls as the calculator.
         const data = {
             defender: defender,
             defender_item: $('#defender_item').val() || null,
@@ -140,118 +140,28 @@ $(document).ready(function() {
             move: $('#move').val() || null,
             attacker_item: $('#attacker_item').val() || null,
             percent: $('#ko_percent').val() ? parseFloat($('#ko_percent').val()) : 100.0,
-            // Attacker filters
             filter_type1: $('#filter_type1').val() || null,
             filter_min_bst: $('#filter_min_bst').val() ? parseInt($('#filter_min_bst').val()) : null,
             filter_min_spe: $('#filter_min_spe').val() ? parseInt($('#filter_min_spe').val()) : null,
-            // Performance option
             only_super_effective: $('#only_super_effective').is(':checked'),
-            // Field effects
             terrain: $('input[name="terrain"]:checked').val() || null,
             weather: $('input[name="weather"]:checked').val() || null,
-            field: [],
-            format: $('input[name="format"]:checked').val() || 'doubles'
+            field: $('input[name="fieldState"]:checked').map(function() { return this.value; }).get(),
+            format: $('input[name="format"]:checked').val() || 'doubles',
+            spikes: $('input[name="spikes"]:checked').val() || '0',
+            isSR: $('#SR').is(':checked'),
+            isReflect: $('#reflect').is(':checked'),
+            isLightScreen: $('#lightScreen').is(':checked'),
+            isAuroraVeil: $('#auroraVeil').is(':checked'),
+            isFriendGuard: $('#friendGuard').is(':checked'),
+            isProtect: $('#protect').is(':checked'),
+            isLeechSeed: $('#leechSeed').is(':checked'),
+            isSaltCure: $('#saltCure').is(':checked'),
+            isCharge: $('#charge').is(':checked'),
+            isHelpingHand: $('#helpingHand').is(':checked'),
+            isPowerTrickLeft: $('#powerTrickL').is(':checked'),
+            isPowerTrickRight: $('#powerTrickR').is(':checked')
         };
-
-        // Collect field states
-        if ($('#gravity').is(':checked')) {
-            data.field.push('Gravity');
-        }
-        if ($('#magic-room').is(':checked')) {
-            data.field.push('MagicRoom');
-        }
-        if ($('#wonder-room').is(':checked')) {
-            data.field.push('WonderRoom');
-        }
-        if ($('#fairy-aura').is(':checked')) {
-            data.field.push('FairyAura');
-        }
-
-        // Attacker side conditions
-        const attacker_side = {};
-        if ($('#srL').is(':checked')) {
-            attacker_side['isSR'] = true;
-        }
-        if ($('#spikesL').filter(':checked').val()) {
-            attacker_side['spikes'] = parseInt($('input[name="spikesL"]:checked').val());
-        }
-        if ($('#reflectL').is(':checked')) {
-            attacker_side['isReflect'] = true;
-        }
-        if ($('#lightScreenL').is(':checked')) {
-            attacker_side['isLightScreen'] = true;
-        }
-        if ($('#friendGuardL').is(':checked')) {
-            attacker_side['isFriendGuard'] = true;
-        }
-        if ($('#auroraVeilL').is(':checked')) {
-            attacker_side['isAuroraVeil'] = true;
-        }
-        if ($('#protectL').is(':checked')) {
-            attacker_side['isProtected'] = true;
-        }
-        if ($('#leechSeedL').is(':checked')) {
-            attacker_side['isSeeded'] = true;
-        }
-        if ($('#saltCureL').is(':checked')) {
-            attacker_side['isSaltCure'] = true;
-        }
-        if ($('#chargeL').is(':checked')) {
-            attacker_side['isCharged'] = true;
-        }
-        if ($('#helpingHandL').is(':checked')) {
-            attacker_side['isHelpingHand'] = true;
-        }
-        if ($('#tailwindL').is(':checked')) {
-            attacker_side['isTailwind'] = true;
-        }
-        if ($('#powerTrickL').is(':checked')) {
-            attacker_side['isPowerTrick'] = true;
-        }
-        data.attacker_side = attacker_side;
-
-        // Defender side conditions
-        const defender_side = {};
-        if ($('#srR').is(':checked')) {
-            defender_side['isSR'] = true;
-        }
-        if ($('#spikesR').filter(':checked').val()) {
-            defender_side['spikes'] = parseInt($('input[name="spikesR"]:checked').val());
-        }
-        if ($('#reflectR').is(':checked')) {
-            defender_side['isReflect'] = true;
-        }
-        if ($('#lightScreenR').is(':checked')) {
-            defender_side['isLightScreen'] = true;
-        }
-        if ($('#friendGuardR').is(':checked')) {
-            defender_side['isFriendGuard'] = true;
-        }
-        if ($('#auroraVeilR').is(':checked')) {
-            defender_side['isAuroraVeil'] = true;
-        }
-        if ($('#protectR').is(':checked')) {
-            defender_side['isProtected'] = true;
-        }
-        if ($('#leechSeedR').is(':checked')) {
-            defender_side['isSeeded'] = true;
-        }
-        if ($('#saltCureR').is(':checked')) {
-            defender_side['isSaltCure'] = true;
-        }
-        if ($('#chargeR').is(':checked')) {
-            defender_side['isCharged'] = true;
-        }
-        if ($('#helpingHandR').is(':checked')) {
-            defender_side['isHelpingHand'] = true;
-        }
-        if ($('#tailwindR').is(':checked')) {
-            defender_side['isTailwind'] = true;
-        }
-        if ($('#powerTrickR').is(':checked')) {
-            defender_side['isPowerTrick'] = true;
-        }
-        data.defender_side = defender_side;
 
         console.log('Sending data:', data);
 

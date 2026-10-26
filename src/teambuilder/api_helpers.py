@@ -35,9 +35,14 @@ def truthy(value, default: bool = True) -> bool:
 
 
 def _as_list(data, key) -> list:
-    if hasattr(data, "getlist"):          
-        return data.getlist(key)
+    if hasattr(data, "getlist"):
+        values = data.getlist(key)
+        if not values and key == "field":
+            values = data.getlist("field[]") or data.getlist("fieldState")
+        return values
     value = data.get(key, [])
+    if not value and key == "field":
+        value = data.get("field[]", data.get("fieldState", []))
     return [value] if isinstance(value, str) else list(value)
 
 
@@ -82,11 +87,11 @@ def apply_matchup_conditions(data, field_opts: dict) -> None:
     The one block that was identical in /api/survival and /api/ko-calculation.
     """
     attacker_side: dict[str, bool] = {}
-    if data.get("isHelpingHand"):
+    if truthy(data.get("isHelpingHand"), default=False):
         attacker_side["isHelpingHand"] = True
-    if data.get("isCharge"):
+    if truthy(data.get("isCharge"), default=False):
         attacker_side["isCharge"] = True
-    if data.get("isPowerTrickLeft"):
+    if truthy(data.get("isPowerTrickLeft"), default=False):
         attacker_side["isPowerTrick"] = True
     if attacker_side:
         field_opts["attackerSide"] = attacker_side
@@ -94,13 +99,13 @@ def apply_matchup_conditions(data, field_opts: dict) -> None:
     defender_side: dict[str, bool | int] = {
         calc_flag: True
         for form_flag, calc_flag in DEFENDER_SIDE_FLAGS.items()
-        if data.get(form_flag)
+        if truthy(data.get(form_flag), default=False)
     }
-    if data.get("isPowerTrickRight"):
+    if truthy(data.get("isPowerTrickRight"), default=False):
         defender_side["isPowerTrick"] = True
-    if data.get("spikes"):
+    if data.get("spikes") not in (None, "", "0", 0):
         defender_side["spikes"] = int(data["spikes"])
-    if data.get("isSR"):
+    if truthy(data.get("isSR"), default=False):
         defender_side["isSR"] = True
     if defender_side:
         field_opts["defenderSide"] = defender_side
@@ -122,12 +127,15 @@ def build_matchup_options(data) -> tuple[dict, dict, dict]:
 def build_bulk_ko_kwargs(data) -> dict:
     """Keyword arguments for can_ko / can_ko_any_atk, empty values as None."""
     defender_evs = {s: int(data[f"defender_{s}"]) for s in ("hp", "def", "spd") if data.get(f"defender_{s}")}
+    field_opts = build_field_opts(data)
+    apply_matchup_conditions(data, field_opts)
     return dict(
         percent=float(data.get("percent", 100.0)),
+        positive_nature=True,
         defender_evs=defender_evs or None,
         defender_opts=item_ability_opts(data, "defender") or None,
         attacker_opts=item_ability_opts(data, "attacker", ability=False) or None,
-        field_opts=build_field_opts(data) or None,
+        field_opts=field_opts or None,
         defender_side=data.get("defender_side") or None,
         attacker_side=data.get("attacker_side") or None,
     )

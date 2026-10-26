@@ -167,14 +167,30 @@ $(document).ready(function() {
                 attacker_item: $('#attacker_item').val() || null,
                 attacker_ability: $('#attacker_ability').val() || null,
                 attacker_evs: $('#attacker_evs').val() || '32',
-                attacker_stat: attackerStat,
                 defender_item: $('#defender_item').val() || null,
+                defender_nature: $('#defender_nature').val() || '1.0',
                 percent: $('#survival_percent').val() ? parseFloat($('#survival_percent').val()) : 100.0,
-                // Defender filters
                 filter_type1: $('#filter_type1').val() || null,
                 filter_ability: $('#filter_ability').val() || null,
                 filter_min_bst: $('#filter_min_bst').val() ? parseInt($('#filter_min_bst').val()) : null,
-                filter_min_hp: $('#filter_min_hp').val() ? parseInt($('#filter_min_hp').val()) : null
+                filter_min_hp: $('#filter_min_hp').val() ? parseInt($('#filter_min_hp').val()) : null,
+                format: $('input[name="format"]:checked').val() || 'doubles',
+                terrain: $('input[name="terrain"]:checked').val() || null,
+                weather: $('input[name="weather"]:checked').val() || null,
+                field: $('input[name="fieldState"]:checked').map(function() { return this.value; }).get(),
+                spikes: $('input[name="spikes"]:checked').val() || '0',
+                isSR: $('#SR').is(':checked'),
+                isReflect: $('#reflect').is(':checked'),
+                isLightScreen: $('#lightScreen').is(':checked'),
+                isAuroraVeil: $('#auroraVeil').is(':checked'),
+                isFriendGuard: $('#friendGuard').is(':checked'),
+                isProtect: $('#protect').is(':checked'),
+                isLeechSeed: $('#leechSeed').is(':checked'),
+                isSaltCure: $('#saltCure').is(':checked'),
+                isCharge: $('#charge').is(':checked'),
+                isHelpingHand: $('#helpingHand').is(':checked'),
+                isPowerTrickLeft: $('#powerTrickL').is(':checked'),
+                isPowerTrickRight: $('#powerTrickR').is(':checked')
             };
 
         // Show loading state

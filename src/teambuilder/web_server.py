@@ -4,7 +4,7 @@ import queue
 import threading
 
 from teambuilder.api_helpers import (
-    truthy, item_ability_opts, build_matchup_options, build_bulk_ko_kwargs, candidate_names,
+    truthy, build_matchup_options, build_bulk_ko_kwargs, candidate_names,
 )
 from teambuilder.damage import (
     can_ko, can_ko_any_atk, can_survive, min_evs_to_ko, min_evs_to_survive,
@@ -303,6 +303,31 @@ def run_bulk_ko(names, data, *, progress_callback=None, result_callback=None) ->
     return [ko_result_row(name, inv, default_move=move or 'Best move') for name, inv in found.items()]
 
 
+@app.route('/api/bulk-ko-stream', methods=['GET'])
+def bulk_ko_finder_stream():
+    """Find Pokemon that can KO a defender, streaming progress and results."""
+    data = request.args
+    if not data.get('defender'):
+        return jsonify({'success': False, 'error': 'Defender Pokemon is required'}), 400
+
+    def task(emit):
+        names = candidate_names(data, ('bst', 'spe'))
+        emit({'type': 'start', 'total': len(names)})
+        progress, result = _sse_callbacks(emit)
+        if data.get('move'):
+            rows = run_bulk_ko(names, data)
+            emit({'type': 'batch_results', 'results': rows})
+        else:
+            run_bulk_ko(
+                names,
+                data,
+                progress_callback=progress,
+                result_callback=result,
+            )
+
+    return stream_events(task)
+
+
 def stream_events(task):
     """Run `task(emit)` in a worker thread and stream what it emits as SSE.
 
@@ -317,6 +342,8 @@ def stream_events(task):
             q.put({'type': 'complete', 'success': True})
         except Exception as e:
             q.put({'type': 'complete', 'success': False, 'error': str(e)})
+        finally:
+            q.put(None)
 
     def generate():
         threading.Thread(target=work, daemon=True).start()
@@ -342,56 +369,9 @@ def bulk_ko_finder():
         return jsonify({'success': False, 'error': 'Defender Pokemon is required'}), 400
 
     move = data.get('move')  # Optional - if provided, use can_ko
-    percent = data.get('percent', 100.0)
-
-    # Build defender options
-    defender_evs = {}
-    if data.get('defender_hp'):
-        defender_evs['hp'] = int(data['defender_hp'])
-    if data.get('defender_def'):
-        defender_evs['def'] = int(data['defender_def'])
-    if data.get('defender_spd'):
-        defender_evs['spd'] = int(data['defender_spd'])
-
-    defender_opts = {}
-    if data.get('defender_item'):
-        defender_opts['item'] = data['defender_item']
-    if data.get('defender_ability'):
-        defender_opts['ability'] = data['defender_ability']
-
-    # Build attacker options (if any)
-    attacker_opts = {}
-    if data.get('attacker_item'):
-        attacker_opts['item'] = data['attacker_item']
-
-    # Build field options
-    field_opts = {}
-    if data.get('terrain'):
-        field_opts['terrain'] = data['terrain']
-    if data.get('weather'):
-        field_opts['weather'] = data['weather']
-    if data.get('format'):
-        field_opts['gameType'] = data['format'].capitalize()
-
-    # Handle field states (can be multiple)
-    field_states = data.get('field', [])
-    if isinstance(field_states, str):
-        field_states = [field_states]
-    for state in field_states:
-        if state == 'Gravity':
-            field_opts['isGravity'] = True
-        elif state == 'MagicRoom':
-            field_opts['isMagicRoom'] = True
-        elif state == 'WonderRoom':
-            field_opts['isWonderRoom'] = True
-        elif state == 'FairyAura':
-            field_opts['isFairyAura'] = True
-
-    # Get side conditions from request (they're now objects, not individual fields)
-    defender_side = data.get('defender_side', {})
-    attacker_side = data.get('attacker_side', {})
-
     try:
+        kwargs = build_bulk_ko_kwargs(data)
+
         # Get Pokemon names with filters applied
         filters = None
 
@@ -419,7 +399,7 @@ def bulk_ko_finder():
             candidates = search_names()
 
         # Only check super effective moves by default for performance
-        only_super_effective = data.get('only_super_effective', 'true').lower() == 'true'
+        only_super_effective = truthy(data.get('only_super_effective'))
 
         if move:
             # Use can_ko for specific move
@@ -427,26 +407,14 @@ def bulk_ko_finder():
                 candidates,
                 move,
                 defender,
-                percent=percent,
-                defender_evs=defender_evs if defender_evs else None,
-                defender_opts=defender_opts if defender_opts else None,
-                attacker_opts=attacker_opts if attacker_opts else None,
-                field_opts=field_opts if field_opts else None,
-                defender_side=defender_side if defender_side else None,
-                attacker_side=attacker_side if attacker_side else None
+                **kwargs,
             )
         else:
             # Use can_ko_any_atk to find best move
             filter_obj = can_ko_any_atk(
                 defender,
-                percent=percent,
-                defender_evs=defender_evs if defender_evs else None,
-                defender_opts=defender_opts if defender_opts else None,
-                attacker_opts=attacker_opts if attacker_opts else None,
-                field_opts=field_opts if field_opts else None,
-                defender_side=defender_side if defender_side else None,
-                attacker_side=attacker_side if attacker_side else None,
-                only_super_effective=only_super_effective
+                only_super_effective=only_super_effective,
+                **kwargs,
             )
             filter_results = filter_obj.run(candidates)
             results = {name: inv[0] for name, inv in filter_results.items()}
@@ -478,14 +446,17 @@ def bulk_ko_finder():
 
 def run_bulk_survive(names, data, *, progress_callback=None, result_callback=None) -> list[dict]:
     """Survive check over `names` against data['attacker']'s data['move']."""
+    attacker_opts, defender_opts, field_opts = build_matchup_options(data)
     results = can_survive(
         names,
         data['attacker'],
         data['move'],
         percent=float(data.get('percent', 100.0)),
+        defender_nature=data.get('defender_nature', '1.0'),
         attacker_evs=data.get('attacker_evs', '0') or None,   # "32", "32+", "0-" ...
-        attacker_opts=item_ability_opts(data, 'attacker') or None,
-        defender_opts=item_ability_opts(data, 'defender') or None,
+        attacker_opts=attacker_opts or None,
+        defender_opts=defender_opts or None,
+        field_opts=field_opts or None,
         progress_callback=progress_callback,
         result_callback=result_callback,
     )
@@ -552,6 +523,7 @@ def bulk_survive_finder():
         defender_opts['item'] = data['defender_item']
     # No defender ability: one ability across a roster means nothing, and
     # survive_filter picks each defender's own. Filter by it below instead.
+    _, _, field_opts = build_matchup_options(data)
 
     try:
         # Get Pokemon names with filters applied
@@ -593,7 +565,9 @@ def bulk_survive_finder():
             percent=percent,
             attacker_evs=attacker_evs if attacker_evs else None,
             attacker_opts=attacker_opts if attacker_opts else None,
-            defender_opts=defender_opts if defender_opts else None
+            defender_nature=data.get('defender_nature', '1.0'),
+            defender_opts=defender_opts if defender_opts else None,
+            field_opts=field_opts or None,
         )
 
         # Format results
