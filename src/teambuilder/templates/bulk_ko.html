@@ -1,204 +1,201 @@
-{% extends "_tool_page.html" %}
+{% extends "_tool_page.html" %} {% block page_title %}Bulk KO Finder{% endblock
+%} {% block page_heading %}Bulk KO Finder{% endblock %} {% block page_styles %}
+<link type="text/css" rel="stylesheet" href="/static/css/bulk_ko.css" />
+{% endblock %} {% block page_content %}
 
-{% block page_title %}Bulk KO Finder{% endblock %}
-{% block page_heading %}Bulk KO Finder{% endblock %}
-{% block page_styles %}
-		<link type="text/css" rel="stylesheet" href="/static/css/bulk_ko.css" />
-{% endblock %}
+<div class="results-section">
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+  <div class="progress-text" id="progressText">Processing...</div>
+  <div class="results-count" id="resultsCount"></div>
+  <table class="result-table">
+    <thead>
+      <tr>
+        <th>Pokémon</th>
+        <th>Points Needed</th>
+        <th>Best Move</th>
+        <th>Ability Required</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody id="resultsBody">
+      <tr>
+        <td colspan="5" style="text-align: center">
+          Select a defender and click Find Attackers
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 
-{% block page_content %}
+<div class="tool-input-layout">
+  <div aria-label="Attacker Filters" class="panel tool-panel" role="region">
+    <fieldset class="poke-info bulk-options tool-options" id="p1">
+      <legend align="center">Attacker</legend>
 
-			<div class="results-section">
-				<div class="progress-bar" id="progressBar">
-					<div class="progress-fill" id="progressFill"></div>
-				</div>
-				<div class="progress-text" id="progressText">Processing...</div>
-				<div class="results-count" id="resultsCount"></div>
-				<table class="result-table">
-					<thead>
-						<tr>
-							<th>Pokemon</th>
-							<th>Points Needed</th>
-							<th>Best Move</th>
-							<th>Ability Required</th>
-							<th>Description</th>
-						</tr>
-					</thead>
-					<tbody id="resultsBody">
-						<tr>
-							<td colspan="5" style="text-align: center;">Select a defender and click Find Attackers</td>
-						</tr>
-					</tbody>
-				</table>
-			</div>
+      <div class="info-group">
+				<label for="filter_type1">Type</label>
+				<select id="filter_type1">
+					<option value="">Any</option>
+					<option value="Normal">Normal</option>
+					<option value="Fire">Fire</option>
+					<option value="Water">Water</option>
+					<option value="Electric">Electric</option>
+					<option value="Grass">Grassy</option>
+					<option value="Ice">Ice</option>
+					<option value="Fighting">Fighting</option>
+					<option value="Poison">Poison</option>
+					<option value="Ground">Ground</option>
+					<option value="Flying">Flying</option>
+					<option value="Psychic">Psychic</option>
+					<option value="Bug">Bug</option>
+					<option value="Rock">Rock</option>
+					<option value="Ghost">Ghost</option>
+					<option value="Dragon">Dragon</option>
+					<option value="Dark">Dark</option>
+					<option value="Steel">Steel</option>
+					<option value="Fairy">Fairy</option>
+				</select>
+      </div>
 
-			<div class="tool-input-layout">
-			<div aria-label="Attacker Filters" class="panel tool-panel" role="region">
-				<fieldset class="poke-info bulk-options tool-options" id="p1">
-					<legend align="center">Attacker Filters</legend>
+      <div class="info-group">
+        <label for="filter_min_bst">Min BST</label>
+        <input
+          type="number"
+          id="filter_min_bst"
+          placeholder="500"
+          min="0"
+          max="720"
+        />
+      </div>
 
-					<div class="info-group">
-						<div>
-							<label for="filter_type1">Type 1</label>
-							<select id="filter_type1">
-								<option value="">Any</option>
-								<option value="Normal">Normal</option>
-								<option value="Fire">Fire</option>
-								<option value="Water">Water</option>
-								<option value="Electric">Electric</option>
-								<option value="Grass">Grassy</option>
-								<option value="Ice">Ice</option>
-								<option value="Fighting">Fighting</option>
-								<option value="Poison">Poison</option>
-								<option value="Ground">Ground</option>
-								<option value="Flying">Flying</option>
-								<option value="Psychic">Psychic</option>
-								<option value="Bug">Bug</option>
-								<option value="Rock">Rock</option>
-								<option value="Ghost">Ghost</option>
-								<option value="Dragon">Dragon</option>
-								<option value="Dark">Dark</option>
-								<option value="Steel">Steel</option>
-								<option value="Fairy">Fairy</option>
-							</select>
-						</div>
-					</div>
+      <div class="info-group">
+        <label for="filter_min_spe">Min Speed</label>
+        <input
+          type="number"
+          id="filter_min_spe"
+          placeholder="100"
+          min="0"
+          max="255"
+        />
+      </div>
 
-					<div class="info-group">
-						<label for="filter_min_bst">Min BST</label>
-						<input type="number" id="filter_min_bst" placeholder="500" min="0" max="720" />
-					</div>
+      <div class="info-group">
+        <label for="move">Target Move</label>
+        <select id="move"></select>
+      </div>
 
-					<div class="info-group">
-						<label for="filter_min_spe">Min Speed</label>
-						<input type="number" id="filter_min_spe" placeholder="100" min="0" max="255" />
-					</div>
+      <div class="info-group">
+        <label for="attacker_item">Attacker Item</label>
+        <select id="attacker_item" class="item"></select>
+      </div>
 
-					<div class="info-group">
-						<label for="move">Target Move</label>
-						<select id="move"></select>
-					</div>
+      <div class="info-group">
+        <label for="ko_percent">KO Threshold (%)</label>
+        <input type="number" id="ko_percent" value="100" min="0" max="100" />
+      </div>
 
-					<div class="info-group">
-						<label for="attacker_item">Attacker Item</label>
-						<select id="attacker_item" class="item"></select>
-					</div>
+      <div class="info-group">
+        <label>
+          <input type="checkbox" id="only_super_effective" checked />
+          Only check super effective moves
+        </label>
+      </div>
 
-					<div class="info-group">
-						<label for="ko_percent">KO Threshold (%)</label>
-						<input type="number" id="ko_percent" value="100" min="0" max="100" />
-					</div>
+      <div class="info-group">
+        <button class="btn btn-wide bulk-calculate" id="searchBtn">
+          Find Attackers
+        </button>
+        <button class="search-btn cancel" id="cancelBtn" style="display: none">
+          Cancel
+        </button>
+      </div>
+    </fieldset>
+  </div>
 
-					<div class="info-group">
-						<label>
-							<input type="checkbox" id="only_super_effective" checked />
-							Only check super effective moves
-						</label>
-					</div>
+  {% with default_format="doubles" %} {% include "_field_conditions.html" %} {%
+  endwith %}
 
-					<div class="info-group">
-						<button class="btn btn-wide bulk-calculate" id="searchBtn">Find Attackers</button>
-						<button class="search-btn cancel" id="cancelBtn" style="display: none;">Cancel</button>
-					</div>
-				</fieldset>
-			</div>
+  <div aria-label="Defender" role="region" class="panel tool-panel">
+    <fieldset class="poke-info bulk-options tool-options" id="p2">
+      <legend align="center">Defender</legend>
+      <div class="info-group">
+        <label for="defender">Pokémon</label>
+        <select class="set-selector" id="defender" style="width: 100%">
+          <option value="">Select Pokémon</option>
+        </select>
+      </div>
 
-			{% with default_format="doubles" %}
-			{% include "_field_conditions.html" %}
-			{% endwith %}
+      <div class="info-group">
+        <label for="defender_item">Item</label>
+        <select id="defender_item" class="item"></select>
+      </div>
+      <div class="info-group">
+				<label for="defender_ability">Ability</label>
+				<select id="defender_ability" class="ability"></select>
+      </div>
 
-			<div aria-label="Defender" role="region" class="panel tool-panel">
-				<fieldset class="poke-info bulk-options tool-options" id="p2">
-					<legend align="center">Defender</legend>
-					<select
-						class="set-selector"
-						id="defender"
-						style="width: 100%"
-					>
-						<option value="">Select Pokemon</option>
-					</select>
-
-					<div class="info-group">
-						<div>
-							<label for="defender_item">Item</label>
-							<select
-								id="defender_item"
-								class="item"
-							></select>
-						</div>
-					</div>
-					<div class="info-group">
-						<div>
-							<label for="defender_ability">Ability</label>
-							<select
-								id="defender_ability"
-								class="ability"
-							></select>
-						</div>
-					</div>
-
-					<div class="info-group">
-						<table>
-							<thead>
-								<tr>
-									<th scope="col">Stat</th>
-									<th scope="col">EVs (0-32)</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr class="hp">
-									<th scope="row">
-										<label for="defender_hp">HP</label>
-									</th>
-									<td>
-										<input
-											type="number"
-											id="defender_hp"
-											value="0"
-											min="0"
-											max="32"
-											style="width: 60px"
-										/>
-									</td>
-								</tr>
-								<tr class="df">
-									<th scope="row">
-										<label for="defender_def">Def</label>
-									</th>
-									<td>
-										<input
-											type="number"
-											id="defender_def"
-											value="0"
-											min="0"
-											max="32"
-											style="width: 60px"
-										/>
-									</td>
-								</tr>
-								<tr class="sd">
-									<th scope="row">
-										<label for="defender_spd">SpD</label>
-									</th>
-									<td>
-										<input
-											type="number"
-											id="defender_spd"
-											value="0"
-											min="0"
-											max="32"
-											style="width: 60px"
-										/>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-				</fieldset>
-			</div>
-			</div>
-{% endblock %}
-
-{% block page_scripts %}
-		<script src="/static/js/bulk_ko.js"></script>
+      <div class="info-group">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Stat</th>
+              <th scope="col">EVs (0-32)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="hp">
+              <th scope="row">
+                <label for="defender_hp">HP</label>
+              </th>
+              <td>
+                <input
+                  type="number"
+                  id="defender_hp"
+                  value="0"
+                  min="0"
+                  max="32"
+                  style="width: 60px"
+                />
+              </td>
+            </tr>
+            <tr class="df">
+              <th scope="row">
+                <label for="defender_def">Def</label>
+              </th>
+              <td>
+                <input
+                  type="number"
+                  id="defender_def"
+                  value="0"
+                  min="0"
+                  max="32"
+                  style="width: 60px"
+                />
+              </td>
+            </tr>
+            <tr class="sd">
+              <th scope="row">
+                <label for="defender_spd">SpD</label>
+              </th>
+              <td>
+                <input
+                  type="number"
+                  id="defender_spd"
+                  value="0"
+                  min="0"
+                  max="32"
+                  style="width: 60px"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </fieldset>
+  </div>
+</div>
+{% endblock %} {% block page_scripts %}
+<script src="/static/js/bulk_ko.js"></script>
 {% endblock %}
