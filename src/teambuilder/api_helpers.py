@@ -143,12 +143,14 @@ def build_bulk_ko_kwargs(data) -> dict:
 
 def candidate_names(data, min_stats=("bst",)) -> list[str]:
     """Species passing the page's pre-filters: a type plus any `filter_min_<stat>`."""
-    from teambuilder.filters import has_type, min_stat
+    from teambuilder.filters import ability, has_type, min_stat
     from teambuilder.pokedex import search, search_names
 
     parts = []
     if data.get("filter_type1"):
         parts.append(has_type(data["filter_type1"]))
+    if data.get("filter_ability"):
+        parts.append(ability(data["filter_ability"]))
     for stat in min_stats:
         if data.get(f"filter_min_{stat}"):
             parts.append(min_stat(stat, int(data[f"filter_min_{stat}"])))

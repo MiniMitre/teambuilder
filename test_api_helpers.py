@@ -8,11 +8,16 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from werkzeug.datastructures import MultiDict
 
-from teambuilder.api_helpers import build_bulk_ko_kwargs, build_matchup_options
+from teambuilder.api_helpers import (
+    build_bulk_ko_kwargs,
+    build_matchup_options,
+    candidate_names,
+)
 from teambuilder.calc import build_request, calculate
 from teambuilder.damage import (
     BestAbility, Investment, _required_ability, ko_filter, ko_result_row, survive_filter,
 )
+from teambuilder.pokedex import get_abilities_for_poke
 from teambuilder.web_server import app, run_bulk_survive, stream_events
 
 
@@ -221,6 +226,32 @@ class MatchupOptionsTests(unittest.TestCase):
             },
         })
         self.assertEqual(options["defender_nature"], "1.1")
+
+    def test_bulk_survive_ability_filter_excludes_ineligible_species(self):
+        names = candidate_names({"filter_ability": "Drought"})
+
+        self.assertIn("Ninetales", names)
+        self.assertNotIn("Venusaur", names)
+        self.assertTrue(all(
+            "Drought" in get_abilities_for_poke(name)
+            for name in names
+        ))
+
+    def test_search_applies_defense_bounds_sent_by_the_ui(self):
+        with app.test_client() as client:
+            response = client.post(
+                "/api/search",
+                json={
+                    "move": "Flamethrower",
+                    "defender_min": 150,
+                    "defender_max": 160,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        results = response.get_json()["results"]
+        self.assertTrue(results)
+        self.assertTrue(all(150 <= pokemon["def"] <= 160 for pokemon in results))
 
     def test_bulk_pages_render_the_shared_calculator_field_panel(self):
         with app.test_client() as client:

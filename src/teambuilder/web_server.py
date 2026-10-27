@@ -239,8 +239,10 @@ def search_pokemon():
 
     # Stat range filters
     for stat in ['hp', 'atk', 'def', 'spa', 'spd', 'spe', 'bst']:
-        min_val = data.get(f'{stat}_min')
-        max_val = data.get(f'{stat}_max')
+        min_key = 'defender_min' if stat == 'def' else f'{stat}_min'
+        max_key = 'defender_max' if stat == 'def' else f'{stat}_max'
+        min_val = data.get(min_key, data.get(f'{stat}_min'))
+        max_val = data.get(max_key, data.get(f'{stat}_max'))
         if min_val is not None and max_val is not None:
             stat_filter = stat_between(stat, int(min_val), int(max_val))
             filters = stat_filter if filters is None else filters & stat_filter
