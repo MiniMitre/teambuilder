@@ -1,3 +1,4 @@
+import re
 from math import ceil
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -8,16 +9,10 @@ from tqdm import tqdm
 
 from teambuilder.calc import (
     CalcError, build_request, calculate, move_category,
-    move_type as get_move_type, _TYPE_CHART,
+    move_type as get_move_type, _TYPE_CHART, TYPE_CHANGING_ABILITIES,
     )
 from teambuilder.data import DB_PATH
 from teambuilder.pokedex import get_abilities_for_poke, learnset, that_learn, _query
-
-# Abilities that change a Normal move's type, and the type they change it to.
-_ABILITY_MOVE_TYPE = {
-    "Aerilate": "Flying", "Pixilate": "Fairy", "Galvanize": "Electric",
-    "Refrigerate": "Ice", "Normalize": "Normal",
-}
 
 # Champions gives each stat 0-32 points, so every search below is a scan over
 # 33 candidates in one batch - ~20ms, and damage is monotonic in the invested
@@ -85,44 +80,13 @@ def _pin_ability(opts: dict | None, ability: str) -> dict:
     return {**(opts or {}), "ability": ability}
 
 
-_NATURE_NAMES = {
-    'Adamant', 'Modest', 'Timid', 'Jolly', 'Bold', 'Calm', 'Careful', 'Impish', 'Hasty',
-    'Naive', 'Naughty', 'Lonely', 'Mild', 'Quiet', 'Brave', 'Relaxed', 'Sassy', 'Hardy',
-    'Docile', 'Bashful', 'Quirky', 'Serious',
-}
-_MULTI_WORD_ABILITIES = {
-    'Huge Power', 'Iron Fist', 'Rock Head', 'Super Luck', 'Wonder Guard', 'Pure Power',
-    'Skill Link', 'Serene Grace', 'Mold Breaker', 'Flash Fire', 'Water Absorb',
-    'Volt Absorb', 'Thick Fat', 'Swift Swim', 'Sand Rush', 'Sand Veil', 'Snow Cloak',
-    'Rain Dish', 'Natural Cure', 'Vital Spirit', 'Effect Spore', 'Poison Heal',
-    'Magic Guard', 'Magic Bounce', 'Shadow Tag', 'Arena Trap', 'Magnet Pull',
-}
-
-
-def ability_from_desc(desc: str) -> str:
-    """Pull the attacker's ability out of a calc description, or 'Any'.
-
-    Takes the token(s) after ' Atk '; if that is a number or a nature there was
-    no ability in the text. Only two-word abilities need listing; one-word
-    ones fall through.
-    """
-    _, found, after = desc.partition(" Atk ")
-    parts = after.split()
-    if not found or not parts:
-        return "Any"
-    if len(parts) >= 2 and f"{parts[0]} {parts[1]}" in _MULTI_WORD_ABILITIES:
-        return f"{parts[0]} {parts[1]}"
-    first = parts[0]
-    return "Any" if first.isdigit() or first in _NATURE_NAMES else first
-
-
 def ko_result_row(name: str, investment: Investment, default_move: str = "Best move") -> dict:
     """The dict shape every KO endpoint and the SSE callback send to the UI."""
     return {
         "name": name,
         "points": investment.points,
         "move": investment.move or default_move,
-        "ability": investment.ability or ability_from_desc(investment.desc),
+        "ability": investment.ability or "Any",
         "desc": investment.desc,
     }
 
@@ -136,7 +100,7 @@ def survive_result_row(name: str, investment: Investment) -> dict:
         "points": investment.points,
         "hp_invest": spread.get("hp", 0),
         "defender_invest": spread.get("def", 0) + spread.get("spd", 0),
-        "ability": desc.split("Ability: ")[-1].split(",")[0] if "Ability:" in desc else "Any",
+        "ability": investment.ability or "Any",
         "desc": desc,
     }
 
@@ -325,17 +289,13 @@ def verify_Min_EVs(
     ]
     return _all(requests, points=[sum(pair.values()) for pair in minPairs])
 
-def _chosen_ability(best: BestAbility, subject: str, db: Path) -> str | None:
-    """What a filter's ability pick is worth reporting: the tied names, or None
-    when `subject` had a choice and every ability it has came out the same.
-
-    A pokemon with one ability always names it - most megas - since "any" would
-    read as wrong next to an ability filter that just asked for that one.
-    """
-    abilities = get_abilities_for_poke(subject, db=db)
-    if len(abilities) > 1 and len(best.names) == len(abilities):
-        return None
-    return " / ".join(best.names)
+def _required_ability(best: BestAbility, desc: str) -> str | None:
+    """Report only abilities named as relevant in the damage description."""
+    required = [
+        name for name in best.names
+        if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", desc, re.IGNORECASE)
+    ]
+    return " / ".join(required) or None
 
 
 def _ability_scan(attacker: str, move: str, defender: str, *, vary: str, pick, options: dict):
@@ -472,7 +432,7 @@ def _ko_at_best_ability(
         }
         investment = min_evs_to_ko(name, move, defender, percent=percent, **pinned)
         if investment is not None and (cheapest is None or investment.points < cheapest.points):
-            cheapest = investment._replace(ability=_chosen_ability(best, name, db))
+            cheapest = investment._replace(ability=_required_ability(best, investment.desc))
     return cheapest
 
 
@@ -789,7 +749,7 @@ def can_ko_any_atk(
     # Pre-computed once: which move types, and which type-changing abilities,
     # are super effective against this defender.
     se_move_types = {t for t in _TYPE_CHART if _effectiveness(t, defender_types) >= 2.0}
-    se_abilities = {a for a, t in _ABILITY_MOVE_TYPE.items()
+    se_abilities = {a for a, t in TYPE_CHANGING_ABILITIES.items()
                     if _effectiveness(t, defender_types) >= 2.0}
 
     options = dict(
@@ -933,11 +893,15 @@ def survive_filter(
                 defender_opts=_pin_ability(natured_defender_opts, best.names[0]),
                 move_opts=move_opts, field_opts=field_opts,
                 defender_side=defender_side, attacker_side=attacker_side,
+                showAll=False,
             )
             if spreads:
-                kept[name] = (spreads[0],)  # every returned spread costs the same
+                investment = spreads[0]._replace(
+                    ability=_required_ability(best, spreads[0].desc)
+                )
+                kept[name] = (investment,)
                 if result_callback:
-                    result_callback(survive_result_row(name, spreads[0]))
+                    result_callback(survive_result_row(name, investment))
         return kept
 
     threshold = "survives" if percent == 100.0 else f"takes under {percent}% from"

@@ -71,69 +71,6 @@ $(document).ready(function () {
 		}
 	});
 
-	// Mega stone mapping - shared between attacker and defender
-	const megaStoneMap = {
-		"Dragonite-Mega": "Dragoninite",
-		"Gyarados-Mega": "Gyaradosite",
-		"Charizard-Mega X": "Charizardite X",
-		"Charizard-Mega Y": "Charizardite Y",
-		"Mewtwo-Mega X": "Mewtwonite X",
-		"Mewtwo-Mega Y": "Mewtwonite Y",
-		"Absol-Mega": "Absolite",
-		"Aerodactyl-Mega": "Aerodactylite",
-		"Aggron-Mega": "Aggronite",
-		"Alakazam-Mega": "Alakazite",
-		"Ampharos-Mega": "Ampharosite",
-		"Banette-Mega": "Banettite",
-		"Beedrill-Mega": "Beedrillite",
-		"Blastoise-Mega": "Blastoisinite",
-		"Blaziken-Mega": "Blazikenite",
-		"Camerupt-Mega": "Cameruptite",
-		"Chandelure-Mega": "Chandelurite",
-		"Charizard-Mega": "Charizardite",
-		"Diancie-Mega": "Diancite",
-		"Gallade-Mega": "Galladite",
-		"Garchomp-Mega": "Garchompite",
-		"Gardevoir-Mega": "Gardevoirite",
-		"Gengar-Mega": "Gengarite",
-		"Glalie-Mega": "Glalitite",
-		"Greninja-Mega": "Greninjite",
-		"Gyarados-Mega": "Gyaradosite",
-		"Heracross-Mega": "Heracronite",
-		"Houndoom-Mega": "Houndoominite",
-		"Kangaskhan-Mega": "Kangaskhanite",
-		"Lopunny-Mega": "Lopunnite",
-		"Lucario-Mega": "Lucarionite",
-		"Manectric-Mega": "Manectrite",
-		"Mawile-Mega": "Mawilite",
-		"Medicham-Mega": "Medichamite",
-		"Metagross-Mega": "Metagrossite",
-		"Pidgeot-Mega": "Pidgeotite",
-		"Pinsir-Mega": "Pinsirite",
-		"Sableye-Mega": "Sablenite",
-		"Salamence-Mega": "Salamencite",
-		"Sceptile-Mega": "Sceptilite",
-		"Scizor-Mega": "Scizorite",
-		"Sharpedo-Mega": "Sharpedonite",
-		"Slowbro-Mega": "Slowbronite",
-		"Steelix-Mega": "Steelixite",
-		"Tyranitar-Mega": "Tyranitarite",
-		"Venusaur-Mega": "Venusaurite"
-	};
-
-	// Helper function to auto-select mega stone
-	function autoSelectMegaStone(pokemon, $itemSelect) {
-		if (pokemon.includes("-Mega")) {
-			const megaStone = megaStoneMap[pokemon];
-			if (megaStone) {
-				const $itemOption = $itemSelect.find(`option[value="${megaStone}"]`);
-				if ($itemOption.length > 0) {
-					$itemSelect.val(megaStone).trigger("change");
-				}
-			}
-		}
-	}
-
 	// Helper function to initialize Select2
 	function initSelect2($element, placeholder, options = {}) {
 		const defaultOptions = {
@@ -152,26 +89,11 @@ $(document).ready(function () {
 			$element.append($("<option>", { value: emptyOption.value, text: emptyOption.text }));
 		}
 		items.forEach((item) => {
+			if (emptyOption && item === emptyOption.value) return;
 			const text = item === "" ? "None" : item;
 			$element.append($("<option>", { value: item, text: text }));
 		});
 	}
-
-	// Mapping of abilities to their weather/terrain effects
-	const abilityToFieldEffect = {
-		// Weather abilities
-		"Drought": "Sun",
-		"Drizzle": "Rain",
-		"Sand Stream": "Sand",
-		"Snow Warning": "Snow",
-		// Terrain abilities
-		"Electric Surge": "Electric",
-		"Grassy Surge": "Grassy",
-		"Misty Surge": "Misty",
-		"Psychic Surge": "Psychic",
-		//Other abilities
-		"Fairy Aura": "fairy-aura",
-	};
 
 	// Helper function to collect checkbox values
 	function collectCheckboxValues(selector) {
@@ -185,24 +107,6 @@ $(document).ready(function () {
 	// Helper function to get radio value or default
 	function getRadioValue(name, defaultValue = "") {
 		return $(`input[name="${name}"]:checked`).val() || defaultValue;
-	}
-
-	// Helper function to set weather/terrain based on ability
-	function setFieldEffectFromAbility(ability) {
-		const effect = abilityToFieldEffect[ability];
-		if (!effect) return;
-
-		// Check if it's a weather or terrain effect
-		const weatherEffects = ["Sun", "Rain", "Sand", "Snow"];
-		const terrainEffects = ["Electric", "Grassy", "Misty", "Psychic"];
-
-		if (weatherEffects.includes(effect)) {
-			// Set weather radio button
-			$(`input[name="weather"][value="${effect}"]`).prop("checked", true);
-		} else if (terrainEffects.includes(effect)) {
-			// Set terrain radio button
-			$(`input[name="terrain"][value="${effect}"]`).prop("checked", true);
-		}
 	}
 
 	// Helper function to load and populate abilities
@@ -368,23 +272,34 @@ $(document).ready(function () {
 
 	// Load items
 	$.get("/api/items", function (items) {
-		populateDropdown($("#itemL1"), items);
-		populateDropdown($("#itemR1"), items);
+		populateDropdown($("#itemL1"), items, { value: "", text: "Select Item" });
+		populateDropdown($("#itemR1"), items, { value: "", text: "Select Item" });
 		$("#itemL1").val("").trigger("change");
 		$("#itemR1").val("").trigger("change");
+		$(".item").trigger("items-loaded");
 	});
 
 	// Load moves when attacker is selected
 	$("#attacker-input").on("change", function () {
 		const pokemon = $(this).val();
+		$("#move-select")
+			.empty()
+			.append($("<option>", { value: "", text: "Select Move" }))
+			.val("")
+			.trigger("change");
+		$("#itemL1").val("").trigger("change");
+		$("#abilityL1")
+			.empty()
+			.append($("<option>", { value: "", text: "Any" }))
+			.val("")
+			.trigger("change");
 		if (pokemon) {
 			$.get(
 				"/api/moves/" + encodeURIComponent(pokemon),
 				function (moves) {
-					populateDropdown($("#move-select"), moves, { value: "", text: "" });
+					populateDropdown($("#move-select"), moves, { value: "", text: "Select Move" });
 					$("#move-select").val("").trigger("change");
 					loadAbilities(pokemon, $("#abilityL1"));
-					autoSelectMegaStone(pokemon, $("#itemL1"));
 					updateCalcHeader();
 				}
 			);
@@ -420,25 +335,14 @@ $(document).ready(function () {
 	// Load defender abilities
 	$("#defender-input").on("change", function () {
 		const pokemon = $(this).val();
+		$("#itemR1").val("").trigger("change");
+		$("#abilityR1")
+			.empty()
+			.append($("<option>", { value: "", text: "Any" }))
+			.val("")
+			.trigger("change");
 		if (pokemon) {
 			loadAbilities(pokemon, $("#abilityR1"));
-			autoSelectMegaStone(pokemon, $("#itemR1"));
-		}
-	});
-
-	// Auto-set weather/terrain when attacker ability changes
-	$("#abilityL1").on("change", function () {
-		const ability = $(this).val();
-		if (ability) {
-			setFieldEffectFromAbility(ability);
-		}
-	});
-
-	// Auto-set weather/terrain when defender ability changes
-	$("#abilityR1").on("change", function () {
-		const ability = $(this).val();
-		if (ability) {
-			setFieldEffectFromAbility(ability);
 		}
 	});
 

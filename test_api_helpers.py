@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from threading import Event
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -9,8 +10,10 @@ from werkzeug.datastructures import MultiDict
 
 from teambuilder.api_helpers import build_bulk_ko_kwargs, build_matchup_options
 from teambuilder.calc import build_request, calculate
-from teambuilder.damage import BestAbility, Investment, ko_filter, survive_filter
-from teambuilder.web_server import app, run_bulk_survive
+from teambuilder.damage import (
+    BestAbility, Investment, _required_ability, ko_filter, ko_result_row, survive_filter,
+)
+from teambuilder.web_server import app, run_bulk_survive, stream_events
 
 
 class MatchupOptionsTests(unittest.TestCase):
@@ -157,7 +160,11 @@ class MatchupOptionsTests(unittest.TestCase):
                 "isSR": True,
             },
         })
-        self.assertTrue(kwargs["positive_nature"])
+        self.assertFalse(kwargs["positive_nature"])
+
+    def test_bulk_ko_positive_nature_is_opt_in(self):
+        self.assertTrue(build_bulk_ko_kwargs({"positive_nature": "true"})["positive_nature"])
+        self.assertFalse(build_bulk_ko_kwargs({"positive_nature": "false"})["positive_nature"])
 
     def test_bulk_survive_maps_repeated_field_states_and_conditions(self):
         data = MultiDict([
@@ -229,6 +236,10 @@ class MatchupOptionsTests(unittest.TestCase):
             self.assertIn(b'name="fieldState"', response.data)
 
         self.assertIn(b'id="defender_nature"', bulk_survive.data)
+        self.assertIn(b'id="attacker_nature"', bulk_ko.data)
+        self.assertIn(b"Required Ability", bulk_survive.data)
+        self.assertIn(b"<th>HP</th>", bulk_survive.data)
+        self.assertIn(b"<th>Def</th>", bulk_survive.data)
         self.assertIn(b'class="result-table"', bulk_ko.data)
         self.assertIn(b'class="result-table"', bulk_survive.data)
         self.assertRegex(calculator.data, rb'<input(?=[^>]*id="singles-format")(?=[^>]*checked)[^>]*>')
@@ -252,7 +263,7 @@ class MatchupOptionsTests(unittest.TestCase):
                         return_value=BestAbility(("Blaze",), (1, 2), ""),
                     ),
                     patch("teambuilder.damage.min_evs_to_ko", side_effect=fake_minimum),
-                    patch("teambuilder.damage._chosen_ability", return_value="Blaze"),
+                    patch("teambuilder.damage._required_ability", return_value="Blaze"),
                 ):
                     found = ko_filter(
                         move, "Snorlax", require_learns=False, positive_nature=True
@@ -274,11 +285,14 @@ class MatchupOptionsTests(unittest.TestCase):
                     patch(
                         "teambuilder.damage.min_evs_to_survive",
                         return_value=[
-                            Investment(1, "test", (0.0, 0.0), (1, 2), 100, spread={"hp": 1})
+                            Investment(
+                                1, "test -- Thick Fat", (0.0, 0.0), (1, 2), 100,
+                                spread={"hp": 1},
+                            )
                         ],
                     ) as minimum_spread,
                 ):
-                    survive_filter(
+                    found = survive_filter(
                         "Pikachu", move, require_learns=False, defender_nature="1.1",
                         progress_callback=lambda *_: None,
                     ).run(["Snorlax"])
@@ -292,6 +306,47 @@ class MatchupOptionsTests(unittest.TestCase):
                     minimum_spread.call_args.kwargs["defender_opts"]["nature"],
                     expected_nature,
                 )
+                self.assertFalse(minimum_spread.call_args.kwargs["showAll"])
+                self.assertEqual(found["Snorlax"][0].ability, "Thick Fat")
+
+    def test_only_abilities_named_in_the_damage_description_are_required(self):
+        best = BestAbility(("Bulletproof",), (0, 0), "")
+        self.assertEqual(
+            _required_ability(best, "Weather Ball vs. Bulletproof Chesnaught-Mega: 0-0"),
+            "Bulletproof",
+        )
+
+        best = BestAbility(("Lightning Rod",), (145, 172), "")
+        self.assertIsNone(
+            _required_ability(best, "Weather Ball vs. 28 HP / 30 SpD Sceptile-Mega: 145-172")
+        )
+
+    def test_ko_result_row_displays_any_when_no_ability_is_required(self):
+        investment = Investment(
+            1, "32 Atk Choice Band Garchomp ...", (0.0, 0.0), (1, 2), 100
+        )
+        self.assertEqual(ko_result_row("Garchomp", investment)["ability"], "Any")
+
+    def test_closing_stream_stops_worker(self):
+        started = Event()
+        stopped = Event()
+
+        def task(emit):
+            started.set()
+            try:
+                while True:
+                    emit({"type": "progress"})
+            finally:
+                stopped.set()
+
+        with app.test_request_context():
+            response = stream_events(task)
+            events = iter(response.response)
+            next(events)
+            self.assertTrue(started.is_set())
+            events.close()
+
+        self.assertTrue(stopped.wait(timeout=1))
 
     def test_bulk_ko_stream_endpoint_used_by_page_exists(self):
         with (
@@ -318,6 +373,7 @@ class MatchupOptionsTests(unittest.TestCase):
         self.assertIn(b'"success": true', response.data)
         self.assertEqual(run.call_args.args[0], ["Pikachu"])
         self.assertEqual(run.call_args.args[1].getlist("field[]"), ["Gravity"])
+        self.assertIsNotNone(run.call_args.kwargs["progress_callback"])
 
 if __name__ == "__main__":
     unittest.main()

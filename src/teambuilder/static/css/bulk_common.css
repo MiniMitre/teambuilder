@@ -1,6 +1,11 @@
+html,
+body {
+	min-width: 0;
+}
+
 .tool-input-layout {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 27.5em minmax(0, 1fr);
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 20px;
 	align-items: start;
 }
@@ -43,6 +48,9 @@
 	box-sizing: border-box;
 	width: 100%;
 	max-width: 100%;
+}
+.tool-input-layout .tool-field-panel .field-info [style*="width: 22.2em"] {
+	width: 100% !important;
 }
 
 .bulk-options {
@@ -104,15 +112,61 @@
 	font-size: 0.8em;
 }
 
-@media (max-width: 1100px) {
-	.tool-input-layout {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-	.tool-input-layout > .tool-field-panel {
-		grid-column: 1 / -1;
-		grid-row: 2;
-		justify-self: center;
-	}
+.bulk-results .result-table,
+.results-section .result-table {
+	width: 100%;
+	table-layout: fixed;
+}
+.bulk-results .result-table th,
+.bulk-results .result-table td,
+.results-section .result-table th,
+.results-section .result-table td {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.bulk-results .result-table th,
+.results-section .result-table th {
+	opacity: 1;
+	font-weight: normal;
+	color: inherit;
+}
+.bulk-results .result-table td,
+.results-section .result-table td {
+	color: inherit;
+}
+.bulk-results .result-table th:nth-child(1),
+.bulk-results .result-table th:nth-child(2),
+.bulk-results .result-table td:nth-child(1),
+.bulk-results .result-table td:nth-child(2) {
+	font-weight: bold;
+}
+.bulk-results .result-table th:nth-child(n + 3),
+.bulk-results .result-table td:nth-child(n + 3),
+.results-section .result-table th,
+.results-section .result-table td {
+	font-size: inherit;
+}
+.bulk-results .result-table th:nth-child(n + 3),
+.bulk-results .result-table td:nth-child(n + 3) {
+	font-weight: normal;
+}
+.bulk-results .result-table th:nth-child(1) { width: 15%; }
+.bulk-results .result-table th:nth-child(2) { width: 12%; }
+.bulk-results .result-table th:nth-child(3),
+.bulk-results .result-table th:nth-child(4) { width: 7%; }
+.bulk-results .result-table th:nth-child(5) { width: 15%; }
+.bulk-results .result-table th:nth-child(6) { width: 44%; }
+.results-section .result-table th:nth-child(1) { width: 17%; }
+.results-section .result-table th:nth-child(2) { width: 13%; }
+.results-section .result-table th:nth-child(3) { width: 15%; }
+.results-section .result-table th:nth-child(4) { width: 15%; }
+.results-section .result-table th:nth-child(5) { width: 40%; }
+.ability-not-required {
+	color: #999 !important;
+}
+.field-condition-note {
+	color: #999;
+	font-size: 0.9em;
 }
 
 @media (max-width: 700px) {

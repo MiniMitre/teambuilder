@@ -148,7 +148,6 @@ def build_request(
         "field": {"gameType": "Doubles", **(field_opts or {})},
     }
 
-    # print(request)
 
     # Add side conditions if provided
     if defender_side:

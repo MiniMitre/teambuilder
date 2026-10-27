@@ -131,7 +131,7 @@ def build_bulk_ko_kwargs(data) -> dict:
     apply_matchup_conditions(data, field_opts)
     return dict(
         percent=float(data.get("percent", 100.0)),
-        positive_nature=True,
+        positive_nature=truthy(data.get("positive_nature"), default=False),
         defender_evs=defender_evs or None,
         defender_opts=item_ability_opts(data, "defender") or None,
         attacker_opts=item_ability_opts(data, "attacker", ability=False) or None,

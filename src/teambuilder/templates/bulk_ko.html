@@ -97,6 +97,14 @@
       </div>
 
       <div class="info-group">
+        <label for="attacker_nature">Offensive Nature</label>
+        <select id="attacker_nature">
+          <option value="1.0">Neutral</option>
+          <option value="1.1">+10% to the targeted attack</option>
+        </select>
+      </div>
+
+      <div class="info-group">
         <label>
           <input type="checkbox" id="only_super_effective" checked />
           Only check super effective moves
@@ -197,5 +205,6 @@
   </div>
 </div>
 {% endblock %} {% block page_scripts %}
+<script src="/static/js/bulk_common.js"></script>
 <script src="/static/js/bulk_ko.js"></script>
 {% endblock %}

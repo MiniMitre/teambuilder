@@ -45,6 +45,8 @@ $(document).ready(function() {
         width: '14em'
     });
 
+    let fairyAuraActive = false;
+
     // Load Pokemon list
     $.get('/api/pokemon', function(data) {
         data.forEach(function(pokemon) {
@@ -69,6 +71,7 @@ $(document).ready(function() {
             data.forEach(function(item) {
                 $this.append('<option value="' + item + '">' + item + '</option>');
             });
+            $this.trigger('items-loaded');
             $this.select2({
                 placeholder: 'Select Item',
                 allowClear: true,
@@ -80,6 +83,9 @@ $(document).ready(function() {
     // When defender is selected, load its abilities
     $('#defender').change(function() {
         const pokemon = $(this).val();
+        $('#move').val('').trigger('change');
+        $('#defender_item').val('').trigger('change');
+        $('#defender_ability').empty().append('<option value="">Any</option>').val('').trigger('change');
         if (pokemon) {
             $.get('/api/abilities/' + pokemon, function(data) {
                 $('#defender_ability').empty().append('<option value="">Any</option>');
@@ -96,11 +102,9 @@ $(document).ready(function() {
                 }
                 // Auto-select if only one ability
                 if (data.length === 1) {
-                    $('#defender_ability').val(data[0]);
+                    $('#defender_ability').val(data[0]).trigger('change');
                 }
             });
-        } else {
-            $('#defender_ability').empty().append('<option value="">Any</option>');
         }
     });
 
@@ -139,6 +143,7 @@ $(document).ready(function() {
             defender_spd: $('#defender_spd').val() ? parseInt($('#defender_spd').val()) : null,
             move: $('#move').val() || null,
             attacker_item: $('#attacker_item').val() || null,
+            positive_nature: $('#attacker_nature').val() === '1.1',
             percent: $('#ko_percent').val() ? parseFloat($('#ko_percent').val()) : 100.0,
             filter_type1: $('#filter_type1').val() || null,
             filter_min_bst: $('#filter_min_bst').val() ? parseInt($('#filter_min_bst').val()) : null,
@@ -162,6 +167,7 @@ $(document).ready(function() {
             isPowerTrickLeft: $('#powerTrickL').is(':checked'),
             isPowerTrickRight: $('#powerTrickR').is(':checked')
         };
+        fairyAuraActive = data.field.includes('FairyAura');
 
         console.log('Sending data:', data);
 
@@ -242,13 +248,14 @@ $(document).ready(function() {
 
         let html = '';
         results.forEach(result => {
+            const ability = result.ability || 'Any';
             html += `
                 <tr>
-                    <td>${result.name}</td>
+                    <td>${esc(result.name)}</td>
                     <td>${result.points}</td>
-                    <td>${result.move}</td>
-                    <td>${result.ability}</td>
-                    <td>${result.desc}</td>
+                    <td>${esc(result.move)}</td>
+                    <td class="${ability === 'Any' ? 'ability-not-required' : ''}">${esc(ability)}</td>
+                    <td>${window.bulkResultDescription(result.desc, fairyAuraActive)}</td>
                 </tr>
             `;
         });
@@ -262,15 +269,20 @@ $(document).ready(function() {
         $('#resultsCount').text(currentCount + ' result' + (currentCount !== 0 ? 's' : ''));
 
         // Append the new result
+        const ability = result.ability || 'Any';
         const row = `
             <tr>
-                <td>${result.name}</td>
+                <td>${esc(result.name)}</td>
                 <td>${result.points}</td>
-                <td>${result.move}</td>
-                <td>${result.ability}</td>
-                <td>${result.desc}</td>
+                <td>${esc(result.move)}</td>
+                <td class="${ability === 'Any' ? 'ability-not-required' : ''}">${esc(ability)}</td>
+                <td>${window.bulkResultDescription(result.desc, fairyAuraActive)}</td>
             </tr>
         `;
         $('#resultsBody').append(row);
+    }
+
+    function esc(value) {
+        return $('<div>').text(value == null ? '' : value).html();
     }
 });

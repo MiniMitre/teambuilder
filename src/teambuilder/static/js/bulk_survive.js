@@ -75,6 +75,7 @@ $(document).ready(function() {
             data.forEach(function(item) {
                 $this.append('<option value="' + item + '">' + item + '</option>');
             });
+            $this.trigger('items-loaded');
             $this.select2({
                 placeholder: 'Select Item',
                 allowClear: true,
@@ -86,6 +87,9 @@ $(document).ready(function() {
     // When attacker is selected, load its moves and abilities
     $('#attacker').change(function() {
         const pokemon = $(this).val();
+        $('#move').empty().append('<option value="">Select Move</option>').val('').trigger('change');
+        $('#attacker_item').val('').trigger('change');
+        $('#attacker_ability').empty().append('<option value="">Any</option>').val('').trigger('change');
         if (pokemon) {
             // Load moves for this specific Pokemon
             $.get('/api/moves/' + pokemon, function(data) {
@@ -109,14 +113,13 @@ $(document).ready(function() {
                         width: '100%'
                     });
                 }
-                // Auto-select if only one ability
+                // Auto-select if only one ability and apply its field effect.
                 if (data.length === 1) {
-                    $('#attacker_ability').val(data[0]);
+                    $('#attacker_ability').val(data[0]).trigger('change');
                 }
             });
         } else {
             $('#move').empty().append('<option value="">Select Move</option>');
-            $('#attacker_ability').empty().append('<option value="">Any</option>');
         }
     });
 
@@ -139,6 +142,7 @@ $(document).ready(function() {
 
     // Every survivor streamed in so far, kept so the table can be sorted at the end.
     let rows = [];
+    let fairyAuraActive = false;
 
     function esc(value) {
         return $('<div>').text(value == null ? '' : value).html();
@@ -192,6 +196,7 @@ $(document).ready(function() {
                 isPowerTrickLeft: $('#powerTrickL').is(':checked'),
                 isPowerTrickRight: $('#powerTrickR').is(':checked')
             };
+        fairyAuraActive = data.field.includes('FairyAura');
 
         // Show loading state
         rows = [];
@@ -258,14 +263,15 @@ $(document).ready(function() {
     }
 
     function rowHtml(result) {
+        const ability = result.ability || 'Any';
         return `
             <tr>
                 <td>${esc(result.name)}</td>
                 <td>${result.points}</td>
                 <td>${result.hp_invest}</td>
                 <td>${result.defender_invest}</td>
-                <td>${esc(result.ability)}</td>
-                <td>${esc(result.desc)}</td>
+                <td class="${ability === 'Any' ? 'ability-not-required' : ''}">${esc(ability)}</td>
+                <td>${window.bulkResultDescription(result.desc, fairyAuraActive)}</td>
             </tr>
         `;
     }

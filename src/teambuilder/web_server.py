@@ -90,7 +90,7 @@ def get_items():
         "Manectite", "Houndoominite", "Audinite", "Lopunnite", "Sablenite",
         "Sharpedonite", "Gyaradosite", "Lucarionite", "Heracronite", "Aerodactylite",
         "Eelektrossite", "Glalitite", "Pinsirite", "Falinksite", "Scolipite",
-        "Gardevoirite", "Galladite", "Skarmorite", "Clefablite", "Dragalgite",
+        "Gardevoirite", "Galladite", "Skarmorite", "Clefablite", "Dragalgite", "Manectrite",
         "Scraftinite", "Pyroarite", "Malamarite", "Alakazite", "Drampanite",
         "Excadrite", "Chandelurite", "Aggronite", "Salamencite", "Metagrossite",
         "Gengarite", "Medichamite", "Abomasite", "Scizorite", "Garchompite",
@@ -283,7 +283,7 @@ def search_pokemon():
 
 
 # --------------------------------------------------------------------------
-# Bulk KO: one worker, used by both the plain POST and the SSE stream
+# Bulk KO
 # --------------------------------------------------------------------------
 
 def run_bulk_ko(names, data, *, progress_callback=None, result_callback=None) -> list[dict]:
@@ -291,7 +291,12 @@ def run_bulk_ko(names, data, *, progress_callback=None, result_callback=None) ->
     move = data.get('move')
     kwargs = build_bulk_ko_kwargs(data)
     if move:
-        found = can_ko(names, move, data['defender'], **kwargs)
+        found = can_ko(
+            names, move, data['defender'],
+            progress_callback=progress_callback,
+            result_callback=result_callback,
+            **kwargs,
+        )
     else:
         check = can_ko_any_atk(
             data['defender'],
@@ -316,7 +321,7 @@ def bulk_ko_finder_stream():
         emit({'type': 'start', 'total': len(names)})
         progress, result = _sse_callbacks(emit)
         if data.get('move'):
-            rows = run_bulk_ko(names, data)
+            rows = run_bulk_ko(names, data, progress_callback=progress)
             emit({'type': 'batch_results', 'results': rows})
         else:
             run_bulk_ko(
@@ -333,112 +338,44 @@ def stream_events(task):
     """Run `task(emit)` in a worker thread and stream what it emits as SSE.
 
     `emit(dict)` pushes one message. A final 'complete' message (success or
-    error) is always sent, so the page knows when to close the EventSource.
+    error) is sent unless the client disconnects.
     """
     q = queue.Queue()
+    cancelled = threading.Event()
+
+    class StreamCancelled(Exception):
+        pass
+
+    def emit(message):
+        if cancelled.is_set():
+            raise StreamCancelled
+        q.put(message)
 
     def work():
         try:
-            task(q.put)
-            q.put({'type': 'complete', 'success': True})
+            task(emit)
+            if not cancelled.is_set():
+                q.put({'type': 'complete', 'success': True})
+        except StreamCancelled:
+            pass
         except Exception as e:
-            q.put({'type': 'complete', 'success': False, 'error': str(e)})
+            if not cancelled.is_set():
+                q.put({'type': 'complete', 'success': False, 'error': str(e)})
         finally:
             q.put(None)
 
     def generate():
         threading.Thread(target=work, daemon=True).start()
-        while True:
-            msg = q.get()
-            if msg is None:
-                break
-            yield f"data: {json.dumps(msg)}\n\n"
+        try:
+            while True:
+                msg = q.get()
+                if msg is None:
+                    break
+                yield f"data: {json.dumps(msg)}\n\n"
+        finally:
+            cancelled.set()
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
-
-@app.route('/api/bulk-ko', methods=['POST'])
-def bulk_ko_finder():
-    """Find which Pokemon can KO a specific defender."""
-    from teambuilder.pokedex import search_names, search
-    from teambuilder.damage import can_ko, can_ko_any_atk
-    from teambuilder.filters import has_type, min_stat
-
-    data = request.json
-
-    defender = data.get('defender')
-    if not defender:
-        return jsonify({'success': False, 'error': 'Defender Pokemon is required'}), 400
-
-    move = data.get('move')  # Optional - if provided, use can_ko
-    try:
-        kwargs = build_bulk_ko_kwargs(data)
-
-        # Get Pokemon names with filters applied
-        filters = None
-
-        # Apply attacker filters to narrow down candidates
-        filter_type1 = data.get('filter_type1')
-        if filter_type1:
-            type_filter = has_type(filter_type1)
-            filters = type_filter if filters is None else filters & type_filter
-
-        filter_min_bst = data.get('filter_min_bst')
-        if filter_min_bst:
-            bst_filter = min_stat('bst', int(filter_min_bst))
-            filters = bst_filter if filters is None else filters & bst_filter
-
-        filter_min_spe = data.get('filter_min_spe')
-        if filter_min_spe:
-            spe_filter = min_stat('spe', int(filter_min_spe))
-            filters = spe_filter if filters is None else filters & spe_filter
-
-        # Get candidates - either filtered or all
-        if filters:
-            filtered_results = search(filters, columns="name")
-            candidates = [row[0] for row in filtered_results]
-        else:
-            candidates = search_names()
-
-        # Only check super effective moves by default for performance
-        only_super_effective = truthy(data.get('only_super_effective'))
-
-        if move:
-            # Use can_ko for specific move
-            results = can_ko(
-                candidates,
-                move,
-                defender,
-                **kwargs,
-            )
-        else:
-            # Use can_ko_any_atk to find best move
-            filter_obj = can_ko_any_atk(
-                defender,
-                only_super_effective=only_super_effective,
-                **kwargs,
-            )
-            filter_results = filter_obj.run(candidates)
-            results = {name: inv[0] for name, inv in filter_results.items()}
-
-        # Format results
-        formatted_results = []
-        for name, investment in results.items():
-            ability = investment.ability or 'Any'
-
-            formatted_results.append({
-                'name': name,
-                'points': investment.points,
-                'move': investment.move if investment.move else (move if move else 'Best move'),
-                'ability': ability,
-                'desc': investment.desc
-            })
-
-        return jsonify({
-            'success': True,
-            'results': formatted_results
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
 
 
 # --------------------------------------------------------------------------
@@ -481,118 +418,6 @@ def bulk_survive_finder_stream():
     return stream_events(task)
 
 
-@app.route('/api/bulk-survive', methods=['POST'])
-def bulk_survive_finder():
-    """Find which Pokemon can survive an attack."""
-    from teambuilder.pokedex import search_names, search
-    from teambuilder.damage import attacking_stat, can_survive
-    from teambuilder.filters import ability as can_have_ability, has_type, min_stat
-
-    data = request.json
-    attacker = data.get('attacker')
-    move = data.get('move')
-    if not attacker or not move:
-        return jsonify({'success': False, 'error': 'Attacker Pokemon and move are required'}), 400
-
-    percent = data.get('percent', 100.0)
-
-    # "32", "32+" or "32-": points in the stat the move attacks with, and for
-    # + or - a nature that raises or lowers it - the same reading
-    # min_evs_to_survive gives these strings.
-    attacker_evs = {}
-    attacker_opts = {}
-    evs_text = str(data.get('attacker_evs') or '').strip()
-    if evs_text:
-        stat = attacking_stat(move)
-        try:
-            attacker_evs[stat] = int(evs_text.rstrip('+-'))
-        except ValueError:
-            return jsonify({'success': False, 'error': f'Attacking stat investment must look like 32, 32+ or 32-, got {evs_text!r}'}), 400
-        if evs_text.endswith('+'):
-            attacker_opts['nature'] = 'Adamant' if stat == 'atk' else 'Modest'
-        elif evs_text.endswith('-'):
-            attacker_opts['nature'] = 'Modest' if stat == 'atk' else 'Adamant'
-
-    if data.get('attacker_item'):
-        attacker_opts['item'] = data['attacker_item']
-    if data.get('attacker_ability'):
-        attacker_opts['ability'] = data['attacker_ability']
-
-    # Build defender options
-    defender_opts = {}
-    if data.get('defender_item'):
-        defender_opts['item'] = data['defender_item']
-    # No defender ability: one ability across a roster means nothing, and
-    # survive_filter picks each defender's own. Filter by it below instead.
-    _, _, field_opts = build_matchup_options(data)
-
-    try:
-        # Get Pokemon names with filters applied
-        filters = None
-
-        # Apply defender filters to narrow down candidates
-        filter_type1 = data.get('filter_type1')
-        if filter_type1:
-            type_filter = has_type(filter_type1)
-            filters = type_filter if filters is None else filters & type_filter
-
-        filter_ability = data.get('filter_ability')
-        if filter_ability:
-            ability_filter = can_have_ability(filter_ability)
-            filters = ability_filter if filters is None else filters & ability_filter
-
-        filter_min_bst = data.get('filter_min_bst')
-        if filter_min_bst:
-            bst_filter = min_stat('bst', int(filter_min_bst))
-            filters = bst_filter if filters is None else filters & bst_filter
-
-        filter_min_hp = data.get('filter_min_hp')
-        if filter_min_hp:
-            hp_filter = min_stat('hp', int(filter_min_hp))
-            filters = hp_filter if filters is None else filters & hp_filter
-
-        # Get candidates - either filtered or all
-        if filters:
-            filtered_results = search(filters, columns="name")
-            candidates = [row[0] for row in filtered_results]
-        else:
-            candidates = search_names()
-
-        # Use can_survive
-        results = can_survive(
-            candidates,
-            attacker,
-            move,
-            percent=percent,
-            attacker_evs=attacker_evs if attacker_evs else None,
-            attacker_opts=attacker_opts if attacker_opts else None,
-            defender_nature=data.get('defender_nature', '1.0'),
-            defender_opts=defender_opts if defender_opts else None,
-            field_opts=field_opts or None,
-        )
-
-        # Format results
-        formatted_results = []
-        for name, investment in results.items():
-            spread = investment.spread if investment.spread else {}
-            hp_invest = spread.get('hp', 0)
-            def_invest = spread.get('def', 0) + spread.get('spd', 0)
-
-            formatted_results.append({
-                'name': name,
-                'points': investment.points,
-                'hp_invest': hp_invest,
-                'def_invest': def_invest,
-                'ability': investment.ability or 'Any',
-                'desc': investment.desc
-            })
-
-        return jsonify({
-            'success': True,
-            'results': formatted_results
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
 
 
 # --------------------------------------------------------------------------
@@ -668,12 +493,8 @@ def calculate_ko():
     return _respond(compute)
 
 
-from teambuilder.test_runner import main as run_tests
-
-
 def run_web():
-    """Run the test suite once, then start the Flask web server."""
-    run_tests()
+    """Start the Flask web server."""
     app.run(debug=False, use_reloader=False, port=5000)
 
 
